@@ -1,0 +1,4 @@
+# The Chromatin Game
+pygame-ce>=2.4      # plain `pygame>=2.5` also works
+numpy>=1.24
+scipy>=1.11         # Verlet neighbour lists (cKDTree), needed for N up to 1000
