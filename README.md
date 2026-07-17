@@ -16,6 +16,8 @@ python main.py
 Requires Python 3.10+, `pygame-ce` (or `pygame`) and `numpy`. Nothing else — the
 3D renderer, the colour maps and the Hi-C pipeline are all written from scratch.
 
+<img width="1118" height="374" alt="chromatin_game" src="https://github.com/user-attachments/assets/d6fa2fae-b135-491e-a962-938d560c65c3" />
+
 ---
 
 ## The idea
