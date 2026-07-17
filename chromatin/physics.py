@@ -34,7 +34,7 @@ A_TYPE = 1    # red  -- positive E1 -- weak self-attraction   (euchromatin)
 B_TYPE = -1   # blue -- negative E1 -- strong self-attraction (heterochromatin)
 
 MIN_LOOP_SPAN = 3       # |i - j| must be at least this: no loop onto a neighbour
-N_MIN, N_MAX = 20, 100  # small polymers only, chosen for interactive feel
+N_MIN, N_MAX = 10, 200  # small polymers only, chosen for interactive feel
 
 
 @dataclass(frozen=True)

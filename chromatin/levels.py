@@ -28,18 +28,21 @@ class Level:
     n_samples: int = 1200
     sample_every: int = 25
 
-
 LEVELS = [
-    Level("Two compartments", "Short chain, one loop. Learn to read the checkerboard.",
-          24, 1, 5, 8),
-    Level("Loops and TADs", "Loop corners now sit on top of the compartment signal.",
-          32, 3, 4, 7),
-    Level("Fine checkerboard", "Smaller blocks, more anchors. Precision matters.",
-          40, 4, 3, 6),
-    Level("Full locus", "Everything at once, and enough beads to get lost in.",
-          48, 5, 3, 6, burn_in=10000, n_samples=1500),
+    #                              n  loops  block_min  block_max
+    Level("Couple of Loops",
+          "A and B blocks phase-separate. Paint the ribbon to match the plaid.",
+          10, 3, 3, 5),
+    Level("The Story of a TAD",
+          "Loops pin two beads together and create a bright dot off the diagonal.",
+          25, 10, 4, 6),
+    Level("TADs + compartments",
+          "Loops carve TAD squares on top of the compartment checkerboard.",
+          50, 25, 5, 8),
+    Level("Full locus",
+          "Multiple TADs, fine compartments, nested loops — a real Hi-C puzzle.",
+          100, 40, 7, 12),
 ]
-
 
 class Target:
     """Ground truth + the maps derived from it."""

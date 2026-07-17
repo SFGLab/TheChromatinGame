@@ -692,7 +692,7 @@ class Game:
         f = theme.font(64, bold=True)
         sc.blit(f.render("THE CHROMATIN", True, theme.TEXT), (x - 3, y + 18))
         f2 = theme.font(64, bold=True)
-        sc.blit(f2.render("       GAME", True, theme.GREEN), (x - 3, y + 78))
+        sc.blit(f2.render("MiNIGAME", True, theme.GREEN), (x - 3, y + 78))
         widgets.label(sc, "Build the fold. Match the map.", x, y + 152, size=16,
                       col=theme.TEXT_DIM)
 
@@ -710,7 +710,7 @@ class Game:
                           r.y + 7, size=11, col=theme.TEXT_FAINT, mono=True)
             rec = self.records.get(lvl.name, {}).get("best")
             if rec:
-                widgets.label(sc, f"best {rec:.1f}", r.right + 150, r.y + 7, size=11,
+                widgets.label(sc, f"best {rec:.1f}", r.right + 170, r.y + 7, size=11,
                               col=theme.AMBER, mono=True)
 
         # mode

@@ -1,0 +1,26 @@
+{
+  "Two compartments": {
+    "best": 71.26,
+    "seed": 1
+  },
+  "Loops and TADs": {
+    "best": 80.6,
+    "seed": 1
+  },
+  "Fine checkerboard": {
+    "best": 46.02,
+    "seed": 1
+  },
+  "Full locus": {
+    "best": 45.64,
+    "seed": 5893
+  },
+  "Couple of Loops": {
+    "best": 71.93,
+    "seed": 1
+  },
+  "The Story of a TAD": {
+    "best": 32.81,
+    "seed": 1
+  }
+}
