@@ -1,4 +1,4 @@
-"""Visual identity for Chromatin Arena.
+"""Visual identity for The Chromatin Game.
 
 Design direction: a laboratory instrument console. The palette is grounded in the
 subject's own world -- Hi-C contact maps are read in the "fall" white-to-black

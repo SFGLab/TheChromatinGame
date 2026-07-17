@@ -690,9 +690,9 @@ class Game:
         y = int(H * 0.16)
         widgets.eyebrow(sc, "a polymer physics game about reading hi-c", x, y, theme.CYAN)
         f = theme.font(64, bold=True)
-        sc.blit(f.render("CHROMATIN", True, theme.TEXT), (x - 3, y + 18))
+        sc.blit(f.render("THE CHROMATIN", True, theme.TEXT), (x - 3, y + 18))
         f2 = theme.font(64, bold=True)
-        sc.blit(f2.render("ARENA", True, theme.GREEN), (x - 3, y + 78))
+        sc.blit(f2.render("       GAME", True, theme.GREEN), (x - 3, y + 78))
         widgets.label(sc, "Build the fold. Match the map.", x, y + 152, size=16,
                       col=theme.TEXT_DIM)
 
