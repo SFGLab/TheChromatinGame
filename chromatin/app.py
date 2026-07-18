@@ -21,7 +21,18 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUSIC_DIR = os.path.join(ROOT, "music")
 RECORDS_PATH = os.path.join(ROOT, "records.json")
 
-MENU, LOADING, PLAY, SETTLE, RESULTS = "menu", "loading", "play", "settle", "results"
+SETTINGS_PATH = os.path.join(ROOT, "settings.json")
+
+RESOLUTIONS = [(1280, 800), (1600, 900), (1920, 1080)]
+
+DEFAULT_SETTINGS = {
+    "volume": 1.0,
+    "font_mode": "small",     # "small" | "large"
+    "resolution": 1,           # index into RESOLUTIONS
+    "fullscreen": False,
+}
+
+MENU, SETTINGS, LOADING, PLAY, SETTLE, RESULTS = "menu", "settings", "loading", "play", "settle", "results"
 
 P_LOOP, P_COMP = 0, 1
 PLAYER_NAME = ["Loop player", "Compartment player"]
@@ -48,6 +59,20 @@ def save_records(rec: dict) -> None:
     except Exception:
         pass
 
+def load_settings() -> dict:
+    try:
+        with open(SETTINGS_PATH) as fh:
+            return {**DEFAULT_SETTINGS, **json.load(fh)}
+    except Exception:
+        return dict(DEFAULT_SETTINGS)
+
+
+def save_settings(s: dict) -> None:
+    try:
+        with open(SETTINGS_PATH, "w") as fh:
+            json.dump(s, fh, indent=2)
+    except Exception:
+        pass
 
 class Session:
     """One playthrough of one level."""
@@ -113,10 +138,12 @@ class Game:
     def __init__(self):
         pygame.init()
         pygame.display.set_caption("The Chromatin Game")
-        self.screen = pygame.display.set_mode((theme.WIN_W, theme.WIN_H),
-                                              pygame.RESIZABLE | pygame.DOUBLEBUF)
+        self.settings = load_settings()
+        self.screen = None
+        self.apply_display_settings()
         self.clock = pygame.time.Clock()
         self.music = Music(MUSIC_DIR)
+        self.music.set_volume(self.settings["volume"])
         self.records = load_records()
 
         self.state = MENU
@@ -167,6 +194,18 @@ class Game:
         self.paint: int | None = None
         self.buttons: dict[str, widgets.Button] = {}
 
+    def apply_display_settings(self) -> None:
+        """(Re)create the window with the current settings and apply font scale."""
+        theme.set_font_scale(self.settings["font_mode"])
+        if self.settings["fullscreen"]:
+            self.screen = pygame.display.set_mode(
+                (0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF)
+        else:
+            w, h = RESOLUTIONS[self.settings["resolution"]]
+            self.screen = pygame.display.set_mode(
+                (w, h), pygame.RESIZABLE | pygame.DOUBLEBUF)
+        pygame.event.clear()   # drop spurious events from the mode switch
+
     # ================================================================ toast
     def say(self, msg: str):
         self.toast = msg
@@ -212,6 +251,9 @@ class Game:
         if k == pygame.K_ESCAPE:
             if self.show_help:
                 self.show_help = False
+            elif self.state == SETTINGS:
+                save_settings(self.settings)
+                self.state = MENU
             elif self.state in (PLAY, RESULTS):
                 self.state = MENU
                 self.session = None
@@ -454,6 +496,8 @@ class Game:
                 self.show_help = True
             elif n == "Quit":
                 self.running = False
+            elif n == "Settings":
+                self.state = SETTINGS
             elif n.startswith("Rounds"):
                 self.sel_rounds = self.sel_rounds % 5 + 1
             elif n.startswith("Turn"):
@@ -483,6 +527,33 @@ class Game:
             if n == "Back to menu":
                 self.state = MENU
                 self.session = None
+        elif self.state == SETTINGS:
+            if n == "Back":
+                save_settings(self.settings)
+                self.state = MENU
+            elif n == "Vol -":
+                self.settings["volume"] = max(0.0, self.settings["volume"] - 0.05)
+                self.music.set_volume(self.settings["volume"])
+            elif n == "Vol +":
+                self.settings["volume"] = min(1.0, self.settings["volume"] + 0.05)
+                self.music.set_volume(self.settings["volume"])
+            elif n in ("Small", "Large"):
+                self.settings["font_mode"] = n.lower()
+                theme.set_font_scale(self.settings["font_mode"])
+            elif n == "Windowed":
+                self.settings["fullscreen"] = False
+                self.apply_display_settings()
+            elif n == "Fullscreen":
+                self.settings["fullscreen"] = True
+                self.apply_display_settings()
+            else:
+                # resolution buttons — text is "WIDTHxHEIGHT"
+                for i, (rw, rh) in enumerate(RESOLUTIONS):
+                    if n == f"{rw}x{rh}":
+                        self.settings["resolution"] = i
+                        self.settings["fullscreen"] = False
+                        self.apply_display_settings()
+                        break
 
     # =========================================================== session flow
     def start_session(self):
@@ -631,6 +702,8 @@ class Game:
 
         if self.state == MENU:
             self.draw_menu(W, H)
+        elif self.state == SETTINGS:
+            self.draw_settings(W, H)
         elif self.state == LOADING:
             self.draw_loading(W, H)
         elif self.state in (PLAY, SETTLE):
@@ -692,7 +765,7 @@ class Game:
         f = theme.font(64, bold=True)
         sc.blit(f.render("THE CHROMATIN", True, theme.TEXT), (x - 3, y + 18))
         f2 = theme.font(64, bold=True)
-        sc.blit(f2.render("MiNIGAME", True, theme.GREEN), (x - 3, y + 78))
+        sc.blit(f2.render("       GAME", True, theme.GREEN), (x - 3, y + 78))
         widgets.label(sc, "Build the fold. Match the map.", x, y + 152, size=16,
                       col=theme.TEXT_DIM)
 
@@ -710,7 +783,7 @@ class Game:
                           r.y + 7, size=11, col=theme.TEXT_FAINT, mono=True)
             rec = self.records.get(lvl.name, {}).get("best")
             if rec:
-                widgets.label(sc, f"best {rec:.1f}", r.right + 170, r.y + 7, size=11,
+                widgets.label(sc, f"best {rec:.1f}", r.right + 250, r.y + 7, size=11,
                               col=theme.AMBER, mono=True)
 
         # mode
@@ -737,16 +810,18 @@ class Game:
                           x, y3 + 56, size=11, col=theme.TEXT_FAINT)
 
         y4 = y3 + 86
-        bs = widgets.Button((x, y4, 150, 38), "Start", key="ENTER", size=15)
+        bs   = widgets.Button((x, y4, 150, 38), "Start", key="ENTER", size=15)
         bs.active = True
-        bsh = widgets.Button((x + 158, y4, 130, 38), "Shuffle seed", size=13)
-        bh = widgets.Button((x + 296, y4, 130, 38), "How to play", key="H", size=13)
-        bq = widgets.Button((x + 434, y4, 80, 38), "Quit", size=13)
-        for k, b in (("start", bs), ("seed", bsh), ("help", bh), ("quit", bq)):
+        bsh  = widgets.Button((x + 158, y4, 130, 38), "Shuffle seed", size=13)
+        bh   = widgets.Button((x + 296, y4, 130, 38), "How to play", key="H", size=13)
+        bset = widgets.Button((x + 434, y4, 110, 38), "Settings", size=13)
+        bq   = widgets.Button((x + 552, y4, 80, 38), "Quit", size=13)
+        for k, b in (("start", bs), ("seed", bsh), ("help", bh),
+                    ("settings", bset), ("quit", bq)):
             self.buttons[k] = b
             b.draw(sc)
-        widgets.label(sc, f"seed {self.sel_seed}", x + 522, y4 + 12, size=11,
-                      col=theme.TEXT_FAINT, mono=True)
+        widgets.label(sc, f"seed {self.sel_seed}", x + 640, y4 + 12, size=11,
+                    col=theme.TEXT_FAINT, mono=True)
 
         # music strip
         m = self.music
@@ -756,6 +831,84 @@ class Game:
         if m.has_music:
             widgets.label(sc, f"{len(m.tracks)} track(s)  ·  M mute  ·  N next",
                           x, H - 36, size=11, col=theme.TEXT_FAINT, mono=True)
+            
+    # ---------------------------------------------------------------- settings
+    def draw_settings(self, W, H):
+        sc = self.screen
+        self.buttons = {}
+
+        x = 80
+        y = int(H * 0.10)
+        widgets.eyebrow(sc, "settings", x, y, theme.CYAN)
+        f = theme.font(42, bold=True)
+        sc.blit(f.render("SETTINGS", True, theme.TEXT), (x - 2, y + 12))
+        widgets.label(sc, "Changes are saved when you go back to the menu.",
+                    x, y + 62, size=13, col=theme.TEXT_DIM)
+
+        y += 118
+
+        # --- music volume -------------------------------------------------
+        widgets.eyebrow(sc, "music volume", x, y)
+        vol = self.settings["volume"]
+        bvm = widgets.Button((x, y + 22, 48, 32), "Vol -", size=13)
+        bvp = widgets.Button((x + 274, y + 22, 48, 32), "Vol +", size=13)
+        self.buttons["vol_down"] = bvm
+        self.buttons["vol_up"]   = bvp
+        bvm.draw(sc); bvp.draw(sc)
+        bar = pygame.Rect(x + 56, y + 34, 214, 8)
+        pygame.draw.rect(sc, theme.PANEL, bar, border_radius=4)
+        pygame.draw.rect(sc, theme.CYAN,
+                        (bar.x, bar.y, int(bar.w * vol), bar.h), border_radius=4)
+        widgets.label(sc, f"{int(vol * 100):3d}%", x + 332, y + 28,
+                    size=13, col=theme.TEXT_DIM, mono=True)
+
+        y += 82
+
+        # --- font size ----------------------------------------------------
+        widgets.eyebrow(sc, "font size", x, y)
+        bfs = widgets.Button((x, y + 22, 110, 32), "Small", size=13)
+        bfl = widgets.Button((x + 118, y + 22, 110, 32), "Large", size=13)
+        bfs.active = self.settings["font_mode"] == "small"
+        bfl.active = self.settings["font_mode"] == "large"
+        self.buttons["font_small"] = bfs
+        self.buttons["font_large"] = bfl
+        bfs.draw(sc); bfl.draw(sc)
+        widgets.label(sc, "large adds ~22% to every label",
+                    x + 240, y + 30, size=11,
+                    col=theme.TEXT_FAINT, mono=True)
+
+        y += 82
+
+        # --- resolution ---------------------------------------------------
+        widgets.eyebrow(sc, "resolution (windowed only)", x, y)
+        for i, (rw, rh) in enumerate(RESOLUTIONS):
+            b = widgets.Button((x + i * 132, y + 22, 124, 32),
+                            f"{rw}x{rh}", size=13)
+            b.active  = (self.settings["resolution"] == i
+                        and not self.settings["fullscreen"])
+            b.enabled = not self.settings["fullscreen"]
+            self.buttons[f"res{i}"] = b
+            b.draw(sc)
+
+        y += 82
+
+        # --- display mode -------------------------------------------------
+        widgets.eyebrow(sc, "display mode", x, y)
+        bw = widgets.Button((x, y + 22, 120, 32), "Windowed", size=13)
+        bf = widgets.Button((x + 128, y + 22, 120, 32), "Fullscreen", size=13)
+        bw.active = not self.settings["fullscreen"]
+        bf.active = self.settings["fullscreen"]
+        self.buttons["windowed"]   = bw
+        self.buttons["fullscreen"] = bf
+        bw.draw(sc); bf.draw(sc)
+
+        y += 96
+
+        # --- back ---------------------------------------------------------
+        bb = widgets.Button((x, y, 140, 40), "Back", key="ESC", size=15)
+        bb.active = True
+        self.buttons["back"] = bb
+        bb.draw(sc)
 
     # -------------------------------------------------------------- loading
     def draw_loading(self, W, H):

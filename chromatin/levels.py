@@ -32,16 +32,16 @@ LEVELS = [
     #                              n  loops  block_min  block_max
     Level("Couple of Loops",
           "A and B blocks phase-separate. Paint the ribbon to match the plaid.",
-          10, 3, 3, 5),
+          20, 6, 3, 5),
     Level("The Story of a TAD",
           "Loops pin two beads together and create a bright dot off the diagonal.",
-          25, 10, 4, 6),
+          35, 10, 5, 6),
     Level("TADs + compartments",
           "Loops carve TAD squares on top of the compartment checkerboard.",
-          50, 25, 5, 8),
+          50, 25, 10, 8),
     Level("Full locus",
           "Multiple TADs, fine compartments, nested loops — a real Hi-C puzzle.",
-          100, 40, 7, 12),
+          100, 40, 15, 12),
 ]
 
 class Target:

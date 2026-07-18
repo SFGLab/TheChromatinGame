@@ -64,10 +64,17 @@ def _resolve(stack: list[str]) -> str | None:
 _mono_path = None
 _ui_path = None
 
+FONT_SCALE = 1.0
+
+def set_font_scale(mode: str) -> None:
+    """Called by the settings menu. 'small' = default, 'large' = ~22% bigger."""
+    global FONT_SCALE
+    FONT_SCALE = 1.2 if mode == "large" else 1.0
 
 def font(size: int, *, mono: bool = False, bold: bool = False) -> pygame.font.Font:
     """Fetch a cached font. Mono is used for every number in the app."""
     global _mono_path, _ui_path
+    size = int(round(size * FONT_SCALE))     # <-- ADD THIS LINE
     key = (size, mono, bold)
     if key in _cache:
         return _cache[key]

@@ -45,16 +45,16 @@ class SimParams:
     gamma: float = 2.0          # friction: higher = calmer, and proportionally slower
 
     k_bond: float = 400.0       # stiff backbone     (dt*k/gamma = 0.25, stable)
-    k_angle: float = 40.0        # bending rigidity -> smooth, worm-like chain
-    k_loop: float = 40.0
-    k_grab: float = 60.0
+    k_angle: float = 10.0        # bending rigidity -> smooth, worm-like chain
+    k_loop: float = 50.0
+    k_grab: float = 80.0
 
     ev_eps: float = 200.0      # soft-core height (kT): tall enough to keep apart
     ev_rc: float = 1.0         # exclusion diameter
 
     sigma: float = 2.0         # Gaussian attraction width  (>= ev_rc)
-    eps_AA: float = 5.0        # red / red   -- weak attraction
-    eps_BB: float = 10.0        # blue / blue -- strong attraction
+    eps_AA: float = 2.0        # red / red   -- weak attraction
+    eps_BB: float = 5.0        # blue / blue -- strong attraction
     eps_AB: float = -1.0       # red / blue  -- slight incompatibility (Flory chi)
     eps_domain: float = 0.20    # extra cohesion inside a loop (extrusion-like TAD)
 

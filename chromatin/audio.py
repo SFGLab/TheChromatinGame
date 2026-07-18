@@ -125,6 +125,16 @@ class Music:
             except Exception:
                 pass
 
+    def set_volume(self, v: float) -> None:
+        """Set volume to an absolute value; used by the settings menu."""
+        self.volume = max(0.0, min(1.0, v))
+        self.muted = False
+        if self.ok:
+            try:
+                pygame.mixer.music.set_volume(self.volume)
+            except Exception:
+                pass
+
     def handle(self, ev) -> None:
         if ev.type == self.END:
             self.next()
