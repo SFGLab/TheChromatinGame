@@ -1,6 +1,6 @@
 {
   "volume": 1.0,
-  "font_mode": "large",
-  "resolution": 1,
+  "font_mode": "small",
+  "resolution": 2,
   "fullscreen": false
 }

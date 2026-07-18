@@ -34,19 +34,19 @@ A_TYPE = 1    # red  -- positive E1 -- weak self-attraction   (euchromatin)
 B_TYPE = -1   # blue -- negative E1 -- strong self-attraction (heterochromatin)
 
 MIN_LOOP_SPAN = 3       # |i - j| must be at least this: no loop onto a neighbour
-N_MIN, N_MAX = 10, 200  # small polymers only, chosen for interactive feel
+N_MIN, N_MAX = 10, 1000  # small polymers only, chosen for interactive feel
 
 
 @dataclass(frozen=True)
 class SimParams:
     dt: float = 0.001
     b0: float = 1.0
-    kT: float = 1.0
-    gamma: float = 2.0          # friction: higher = calmer, and proportionally slower
+    kT: float = 0.5
+    gamma: float = 5.0          # friction: higher = calmer, and proportionally slower
 
     k_bond: float = 400.0       # stiff backbone     (dt*k/gamma = 0.25, stable)
-    k_angle: float = 10.0        # bending rigidity -> smooth, worm-like chain
-    k_loop: float = 50.0
+    k_angle: float = 15.0        # bending rigidity -> smooth, worm-like chain
+    k_loop: float = 40.0
     k_grab: float = 80.0
 
     ev_eps: float = 200.0      # soft-core height (kT): tall enough to keep apart

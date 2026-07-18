@@ -158,7 +158,7 @@ class Game:
         self.sel_two = False
         self.sel_rounds = 3
         self.sel_turn_sec = 90
-        self.sel_seed = 1
+        self.sel_seed = int(np.random.default_rng().integers(1, 9999))
         self.show_help = False
 
         self.session: Session | None = None
@@ -508,6 +508,7 @@ class Game:
                 self.sel_seed = int(np.random.default_rng().integers(1, 9999))
             elif n in [l.name for l in LEVELS]:
                 self.sel_level = [l.name for l in LEVELS].index(n)
+                self.sel_seed = int(np.random.default_rng().integers(1, 9999))
         elif self.state == PLAY:
             if n == "Loops":
                 self.set_mode("loop")
@@ -783,7 +784,7 @@ class Game:
                           r.y + 7, size=11, col=theme.TEXT_FAINT, mono=True)
             rec = self.records.get(lvl.name, {}).get("best")
             if rec:
-                widgets.label(sc, f"best {rec:.1f}", r.right + 250, r.y + 7, size=11,
+                widgets.label(sc, f"best {rec:.1f}", r.right + 200, r.y + 7, size=11,
                               col=theme.AMBER, mono=True)
 
         # mode
