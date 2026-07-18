@@ -39,28 +39,28 @@ N_MIN, N_MAX = 10, 200  # small polymers only, chosen for interactive feel
 
 @dataclass(frozen=True)
 class SimParams:
-    dt: float = 0.005
+    dt: float = 0.001
     b0: float = 1.0
     kT: float = 1.0
-    gamma: float = 4.0          # friction: higher = calmer, and proportionally slower
+    gamma: float = 2.0          # friction: higher = calmer, and proportionally slower
 
-    k_bond: float = 200.0       # stiff backbone     (dt*k/gamma = 0.25, stable)
-    k_angle: float = 4.0        # bending rigidity -> smooth, worm-like chain
+    k_bond: float = 400.0       # stiff backbone     (dt*k/gamma = 0.25, stable)
+    k_angle: float = 40.0        # bending rigidity -> smooth, worm-like chain
     k_loop: float = 40.0
     k_grab: float = 60.0
 
-    ev_eps: float = 60.0        # soft-core height (kT): tall enough to keep apart
-    ev_rc: float = 1.15         # exclusion diameter
+    ev_eps: float = 200.0      # soft-core height (kT): tall enough to keep apart
+    ev_rc: float = 1.0         # exclusion diameter
 
-    sigma: float = 1.05         # Gaussian attraction width  (>= ev_rc)
-    eps_AA: float = 0.80        # red / red   -- weak attraction
-    eps_BB: float = 1.80        # blue / blue -- strong attraction
-    eps_AB: float = -0.15       # red / blue  -- slight incompatibility (Flory chi)
+    sigma: float = 2.0         # Gaussian attraction width  (>= ev_rc)
+    eps_AA: float = 5.0        # red / red   -- weak attraction
+    eps_BB: float = 10.0        # blue / blue -- strong attraction
+    eps_AB: float = -1.0       # red / blue  -- slight incompatibility (Flory chi)
     eps_domain: float = 0.20    # extra cohesion inside a loop (extrusion-like TAD)
 
-    k_wall: float = 60.0
+    k_wall: float = 90.0
 
-    contact_rc: float = 1.80    # contact called below this separation
+    contact_rc: float = 1.0    # contact called below this separation
     contact_w: float = 0.15     # softness of the contact call
 
     steps_per_frame: int = 60   # was 25 -- gamma=4 slows dynamics 4x, take more steps

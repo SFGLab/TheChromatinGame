@@ -22,5 +22,9 @@
   "The Story of a TAD": {
     "best": 32.81,
     "seed": 1
+  },
+  "TADs + compartments": {
+    "best": 36.61,
+    "seed": 1
   }
 }
