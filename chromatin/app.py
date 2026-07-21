@@ -111,12 +111,14 @@ def save_settings(s: dict) -> None:
 class Session:
     """One playthrough of one level."""
 
-    def __init__(self, level, seed: int, two_player: bool, rounds: int, turn_seconds: int):
+    def __init__(self, level, seed: int, two_player: bool, rounds: int, turn_seconds: int,
+                hard: bool = False):
         self.level = level
         self.seed = seed
         self.two_player = two_player
         self.rounds = rounds
         self.turn_seconds = turn_seconds
+        self.hard = hard
 
         self.target = None
         self.poly: Polymer | None = None
@@ -220,8 +222,9 @@ class LabSession:
         self.poly.set_params(self.params)
 
     def randomize_all(self) -> None:
-        """Reroll compartments, loops, AND every force-field parameter."""
-        import dataclasses
+        """Reroll compartments and loops only. Force-field parameters are left
+        untouched, so the current physics stays fixed while you explore
+        different starting configurations under it."""
         n = self.poly.n
         rng = np.random.default_rng(np.random.default_rng().integers(1, 999999))
 
@@ -252,21 +255,6 @@ class LabSession:
                 continue
             loops.append((i0, j0))
         loops.sort()
-
-        # --- random parameters, one draw per field, respecting each slider's range
-        updates = {}
-        for _, fields in LAB_PARAM_GROUPS:
-            for key, _, lo, hi, step, _, is_int in fields:
-                if key in ("dt", "steps_per_frame"):
-                    continue        # leave integrator cadence alone -- reroll physics, not perf
-                v = rng.uniform(lo, hi)
-                if step:
-                    v = round(v / step) * step
-                if is_int:
-                    v = int(round(v))
-                updates[key] = float(v) if not is_int else v
-        self.params = dataclasses.replace(self.params, **updates)
-        self.poly.set_params(self.params)
 
         self.poly.load_config(types, loops)
         self._refresh(rebuild_scale=True)
@@ -315,6 +303,7 @@ class Game:
         self.hm_sim = widgets.Heatmap("simulated  /  yours")
 
         # menu selections
+        self.sel_hard = False
         self.sel_level = 0
         self.sel_two = False
         self.sel_rounds = 3
@@ -702,6 +691,10 @@ class Game:
                 self.sel_turn_sec = opts[(i + 1) % len(opts)]
             elif n == "Shuffle seed":
                 self.sel_seed = int(np.random.default_rng().integers(1, 9999))
+            elif n == "Easy":
+                self.sel_hard = False
+            elif n == "Hard":
+                self.sel_hard = True
             elif n in [l.name for l in LEVELS]:
                 self.sel_level = [l.name for l in LEVELS].index(n)
                 self.sel_seed = int(np.random.default_rng().integers(1, 9999))
@@ -776,7 +769,7 @@ class Game:
     def start_session(self):
         lvl = LEVELS[self.sel_level]
         self.session = Session(lvl, self.sel_seed, self.sel_two,
-                               self.sel_rounds, self.sel_turn_sec)
+                            self.sel_rounds, self.sel_turn_sec, hard=self.sel_hard)
         self.state = LOADING
         self._work_progress = [0.0]
         self._work_result = [None]
@@ -795,6 +788,7 @@ class Game:
         self.lab = LabSession(n=40, seed=seed)
         self.lab_scroll = 0
         self.state = LAB
+        self.music.start_if_idle()
 
     def begin_measure(self):
         s = self.session
@@ -859,7 +853,8 @@ class Game:
                 return
             self.state = PLAY
         else:
-            key = s.level.name
+            # Easy and hard mode keep separate records -- hard mode hides the
+            key = s.level.name + ("  [hard]" if s.hard else "")
             rec = self.records.setdefault(key, {})
             prev = float(rec.get("best", 0.0))
             if rep["total"] > prev:
@@ -1028,14 +1023,14 @@ class Game:
             plural = "loop" if lvl.n_loops == 1 else "loops"
             widgets.label(sc, f"{lvl.n} beads · {lvl.n_loops} {plural}", r.right + 12,
                           r.y + 7, size=11, col=theme.TEXT_FAINT, mono=True)
-            rec = self.records.get(lvl.name, {}).get("best")
+            rec_key = lvl.name + ("  [hard]" if self.sel_hard else "")
+            rec = self.records.get(rec_key, {}).get("best")
             if rec:
                 widgets.label(sc, f"best {rec:.1f}", r.right + 200, r.y + 7, size=11,
                               col=theme.AMBER, mono=True)
 
         # mode
-        y3 = y2 + 18 + len(LEVELS) * 42 + 16
-        widgets.eyebrow(sc, "mode", x, y3)
+        y3 = y2 + 18 + len(LEVELS) * 46 + 16
         b1 = widgets.Button((x, y3 + 22, 110, 30), "Solo")
         b1.active = not self.sel_two
         b2 = widgets.Button((x + 118, y3 + 18, 110, 30), "Versus", accent=theme.MAGENTA)
@@ -1044,6 +1039,19 @@ class Game:
         self.buttons["versus"] = b2
         b1.draw(sc)
         b2.draw(sc)
+
+        # --- difficulty: hard mode hides the target's loops and compartment signal
+        bd1 = widgets.Button((x + 480, y3 + 18, 90, 30), "Easy")
+        bd2 = widgets.Button((x + 574, y3 + 18, 90, 30), "Hard", accent=theme.POOR)
+        bd1.active = not self.sel_hard
+        bd2.active = self.sel_hard
+        self.buttons["easy"] = bd1
+        self.buttons["hard"] = bd2
+        bd1.draw(sc)
+        bd2.draw(sc)
+        if self.sel_hard:
+            widgets.label(sc, "hard: no loop dots, no E1 track on the target",
+                        x + 480, y3 + 56, size=11, col=theme.POOR)
 
         if self.sel_two:
             br = widgets.Button((x + 244, y3 + 18, 108, 30), f"Rounds: {self.sel_rounds}")
@@ -1220,19 +1228,29 @@ class Game:
         # ---- heatmaps
         if self._scale is None:
             self._scale = widgets.Scale(t.P, t.C)
-        self.hm_tgt.draw(sc, t.P, t.C, s.map_mode, loops_true=t.loops,
-                         subtitle="what you must reproduce", accent=theme.AMBER,
-                         mouse=self.mouse, scale=self._scale)
+        self.hm_tgt.draw(sc, t.P, t.C, s.map_mode,
+                        loops_true=(None if s.hard else t.loops),
+                        subtitle=("hard mode -- no ground truth overlay" if s.hard
+                                else "what you must reproduce"),
+                        accent=(theme.POOR if s.hard else theme.AMBER),
+                        mouse=self.mouse, scale=self._scale)
         self.hm_sim.draw(sc, s.P_live, s.C_live, s.map_mode,
                          loops_player=s.poly.loops,
                          subtitle=f"ensemble at t={s.sim_time:6.1f}", accent=theme.CYAN,
                          live=(self.state == PLAY and not s.paused),
                          mouse=self.mouse, scale=self._scale)
 
-        # ---- E1 tracks
+        # ---- E1 tracks (target E1 is hidden in hard mode -- it directly reveals
+        # compartment assignment, which the player is meant to infer from the map)
         g1, g2 = self.hm_tgt.grid, self.hm_sim.grid
         y = R["tgt"].bottom + 14
-        widgets.eigen_track(sc, pygame.Rect(g1.x, y, g1.w, 34), t.e1, title="E1 target")
+        if s.hard:
+            ph = pygame.Rect(g1.x, y, g1.w, 34)
+            pygame.draw.rect(sc, theme.PANEL, ph, border_radius=6)
+            widgets.label(sc, "E1 target — hidden in hard mode", ph.x + 10, ph.centery - 6,
+                        size=10, col=theme.TEXT_FAINT, mono=True)
+        else:
+            widgets.eigen_track(sc, pygame.Rect(g1.x, y, g1.w, 34), t.e1, title="E1 target")
         widgets.eigen_track(sc, pygame.Rect(g2.x, y, g2.w, 34), s.e1_live, title="E1 yours")
         yr = y + 42
         ribbon = pygame.Rect(g2.x, yr, g2.w, 14)
@@ -1242,8 +1260,9 @@ class Game:
                            hover=rb if rb is not None else self.view.hover)
         widgets.label(sc, "your colouring — click or drag to paint", g2.x, yr + 17,
                       size=9, col=theme.TEXT_FAINT, mono=True)
-        widgets.label(sc, "green dots = target anchors", g1.x, yr + 2, size=9,
-                      col=theme.GREEN, mono=True)
+        if not s.hard:
+            widgets.label(sc, "green dots = target anchors", g1.x, yr + 2, size=9,
+                        col=theme.GREEN, mono=True)
         widgets.label(sc, "click a cell to tie that loop", g2.x + g2.w, yr - 16, size=9,
                       col=theme.CYAN, mono=True, right=True)
 
@@ -1281,6 +1300,7 @@ class Game:
         rect = self.rects["view"]
         ribbon = self.rects.get("ribbon")
         grid_a = self.hm_lab_a.grid
+        grid_b = self.hm_lab_b.grid
 
         if ev.type == pygame.MOUSEWHEEL:
             if rect.collidepoint(self.mouse):
@@ -1296,7 +1316,36 @@ class Game:
             self.lab_view.pending = None
             return
 
-        # 3D view: click bead to flip/loop, drag to move, drag empty space to orbit
+        # ---- either heatmap: click a cell to tie/untie that loop
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
+                and (grid_a.collidepoint(ev.pos) or grid_b.collidepoint(ev.pos)):
+            hm = self.hm_lab_a if grid_a.collidepoint(ev.pos) else self.hm_lab_b
+            b = hm.bin_at(*ev.pos)
+            if b and b[0] != b[1]:
+                lo, hi = min(b), max(b)
+                if lab.poly.valid_loop(lo, hi):
+                    lab.poly.toggle_loop(lo, hi)
+                    self.say(f"loop ({lo},{hi}) toggled")
+                else:
+                    self.say(f"anchors must be at least {MIN_LOOP_SPAN} beads apart")
+            return
+
+        # ---- the colour ribbon: click to flip, drag to paint
+        if ribbon and ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
+                and ribbon.collidepoint(ev.pos):
+            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
+            if i is not None:
+                lab.poly.flip_type(i)
+                self.paint = int(lab.poly.types[i])
+            return
+        if ribbon and ev.type == pygame.MOUSEMOTION and ev.buttons[0] \
+                and self.paint is not None and ribbon.collidepoint(ev.pos):
+            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
+            if i is not None:
+                lab.poly.set_type(i, self.paint)
+            return
+
+        # ---- 3D view: click bead to flip/loop, drag to move, drag empty space to orbit
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             if not rect.collidepoint(ev.pos):
                 return
@@ -1307,6 +1356,10 @@ class Game:
             else:
                 self.press = (i, ev.pos)
                 self.dragged = False
+                mods = pygame.key.get_mods()
+                if mods & pygame.KMOD_SHIFT:
+                    self.paint = B_TYPE if lab.poly.types[i] == A_TYPE else A_TYPE
+                    lab.poly.set_type(i, self.paint)
             return
         if ev.type == pygame.MOUSEMOTION:
             mx, my = ev.pos
@@ -1316,35 +1369,40 @@ class Game:
                 self.lab_view.cam.orbit(ev.rel[0], ev.rel[1])
             elif self.press is not None and ev.buttons[0]:
                 i, p0 = self.press
+                if self.paint is not None:
+                    if self.lab_view.hover is not None:
+                        lab.poly.set_type(self.lab_view.hover, self.paint)
+                    return
                 if not self.dragged and math.hypot(mx - p0[0], my - p0[1]) > 5:
                     self.dragged = True
                     self.lab_view.dragging = i
                 if self.dragged:
                     _, depth = self.lab_view.screen_positions(lab.poly.pos, rect)
                     tgt = self.lab_view.cam.unproject(mx, my, float(depth[i]),
-                                                    rect.centerx, rect.centery)
+                                                      rect.centerx, rect.centery)
                     tgt = np.clip(tgt, -lab.poly.box, lab.poly.box)
                     lab.poly.grab = (i, tgt)
             return
         if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
             self.orbiting = False
+            self.paint = None
             if self.dragged:
                 lab.poly.grab = None
                 self.lab_view.dragging = None
                 self.dragged = False
                 self.press = None
                 return
-        if self.press is not None:
-            i, _ = self.press
-            self.press = None
-            if self.lab_view.pending is None:
-                self.lab_view.pending = i
-            elif self.lab_view.pending == i:
-                self.lab_view.pending = None
-            else:
-                a = self.lab_view.pending
-                self.lab_view.pending = None
-                lab.poly.toggle_loop(*sorted((a, i)))
+            if self.press is not None:
+                i, _ = self.press
+                self.press = None
+                if self.lab_view.pending is None:
+                    self.lab_view.pending = i
+                elif self.lab_view.pending == i:
+                    self.lab_view.pending = None
+                else:
+                    a = self.lab_view.pending
+                    self.lab_view.pending = None
+                    lab.poly.toggle_loop(*sorted((a, i)))
 
     def ribbon_bin_n(self, mx: int, n: int) -> int | None:
         r = self.rects.get("ribbon")
@@ -1545,9 +1603,9 @@ class Game:
         widgets.label(sc, "THE CHROMATIN GAME",
                     edge, int(9 * S),
                     size=13, col=theme.TEXT, bold=True)
-        widgets.label(sc, s.level.name,
-                    edge, int(29 * S),
-                    size=11, col=theme.TEXT_FAINT)
+        diff_tag = "  ·  HARD" if s.hard else ""
+        widgets.label(sc, s.level.name + diff_tag, edge, int(29 * S), size=11,
+                    col=theme.POOR if s.hard else theme.TEXT_FAINT)
 
         # ---- mode toggles: sized to their text so bigger fonts don't get clipped
         x = int(220 * S)

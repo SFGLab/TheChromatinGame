@@ -36,7 +36,11 @@
     "seed": 7686
   },
   "First Contact": {
-    "best": 0.36,
-    "seed": 8145
+    "best": 73.02,
+    "seed": 6098
+  },
+  "First Contact  [hard]": {
+    "best": 71.88,
+    "seed": 6703
   }
 }
