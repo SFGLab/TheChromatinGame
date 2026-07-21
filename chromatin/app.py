@@ -187,7 +187,6 @@ class LabSession:
         loops = [(2, min(n - 3, max(6, n // 2)))] if n >= 12 else []
         self.poly.load_config(t, loops)
 
-        self.mode = "loop"        # "loop" | "comp"
         self.paused = False
         self.paint: int | None = None
         self.P_live = self.poly.contacts()
@@ -220,17 +219,56 @@ class LabSession:
         self.params = dataclasses.replace(self.params, **{key: value})
         self.poly.set_params(self.params)
 
-    def randomize_pattern(self) -> None:
+    def randomize_all(self) -> None:
+        """Reroll compartments, loops, AND every force-field parameter."""
+        import dataclasses
         n = self.poly.n
         rng = np.random.default_rng(np.random.default_rng().integers(1, 999999))
-        t = np.empty(n, dtype=np.int8)
-        i, cur = 0, A_TYPE
+
+        # --- random compartment blocks
+        types = np.empty(n, dtype=np.int8)
+        cur = int(rng.choice([A_TYPE, B_TYPE]))
+        i = 0
         while i < n:
-            L = int(rng.integers(3, 7))
-            t[i:i + L] = cur
+            L = int(rng.integers(3, 8))
+            types[i:i + L] = cur
             cur = -cur
             i += L
-        self.poly.load_config(t, [])
+        if len(np.unique(types)) == 1:
+            types[n // 2:] = -types[0]
+
+        # --- random loops, a handful, non-overlapping-ish
+        n_loops = int(rng.integers(1, max(2, n // 6)))
+        loops: list[tuple[int, int]] = []
+        tries = 0
+        while len(loops) < n_loops and tries < 200:
+            tries += 1
+            i0 = int(rng.integers(0, n - MIN_LOOP_SPAN - 1))
+            span = int(rng.integers(MIN_LOOP_SPAN, max(MIN_LOOP_SPAN + 1, n // 2)))
+            j0 = i0 + span
+            if j0 >= n:
+                continue
+            if any(max(abs(i0 - a), abs(j0 - b)) < 2 for a, b in loops):
+                continue
+            loops.append((i0, j0))
+        loops.sort()
+
+        # --- random parameters, one draw per field, respecting each slider's range
+        updates = {}
+        for _, fields in LAB_PARAM_GROUPS:
+            for key, _, lo, hi, step, _, is_int in fields:
+                if key in ("dt", "steps_per_frame"):
+                    continue        # leave integrator cadence alone -- reroll physics, not perf
+                v = rng.uniform(lo, hi)
+                if step:
+                    v = round(v / step) * step
+                if is_int:
+                    v = int(round(v))
+                updates[key] = float(v) if not is_int else v
+        self.params = dataclasses.replace(self.params, **updates)
+        self.poly.set_params(self.params)
+
+        self.poly.load_config(types, loops)
         self._refresh(rebuild_scale=True)
 
     def set_bead_count(self, new_n: int) -> None:
@@ -294,8 +332,9 @@ class Game:
         self.hm_lab_a = widgets.Heatmap("contact  ·  reds")
         self.hm_lab_b = widgets.Heatmap("correlation  ·  coolwarm")
         self.lab_sliders: dict[str, widgets.Slider] = {}
+        self.lab_bead_field: widgets.TextField | None = None    # <-- ADD THIS
         self.lab_scroll = 0
-
+        
         # workers
         self._work_progress = [0.0]
         self._work_result = [None]
@@ -378,6 +417,10 @@ class Game:
                 for sl in self.lab_sliders.values():
                     if sl.handle(ev):
                         self.lab.apply_param(sl.key, sl.value)
+                if self.lab_bead_field is not None:
+                    new_n = self.lab_bead_field.handle(ev)
+                    if new_n is not None:
+                        self.lab.set_bead_count(new_n)
                 self.on_lab_mouse(ev)
 
     def on_key(self, ev):
@@ -435,11 +478,9 @@ class Game:
         
         if self.state == LAB:
             lab = self.lab
-            if k == pygame.K_l:
-                lab.mode = "loop"
-            elif k == pygame.K_c:
-                lab.mode = "comp"
-            elif k == pygame.K_SPACE:
+            if self.lab_bead_field is not None and self.lab_bead_field.focused:
+                return          # let the text field own all keys while typing
+            if k == pygame.K_SPACE:
                 lab.paused = not lab.paused
             return
 
@@ -485,12 +526,13 @@ class Game:
 
     # ---------------------------------------------------------- interaction
     def on_play_mouse(self, ev):
-        """Three control surfaces: the 3D view, your own heatmap, and the colour
-        ribbon. The map is not just a readout -- a loop is placed by clicking the
-        cell where you want the corner to appear."""
+        """Three control surfaces: the 3D view, either heatmap, and the colour
+        ribbon. The maps are not just a readout -- a loop is placed by clicking
+        the cell where you want the corner to appear, on either one."""
         s = self.session
         rect = self.rects["view"]
-        grid = self.hm_sim.grid
+        grid_sim = self.hm_sim.grid
+        grid_tgt = self.hm_tgt.grid
         ribbon = self.rects.get("ribbon")
 
         if ev.type == pygame.MOUSEWHEEL:
@@ -502,9 +544,11 @@ class Game:
             self.view.pending = None
             return
 
-        # ---- the player's heatmap: click a cell to tie/untie that loop
-        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and grid.collidepoint(ev.pos):
-            b = self.hm_sim.bin_at(*ev.pos)
+        # ---- either heatmap: click a cell to tie/untie that loop
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
+                and (grid_sim.collidepoint(ev.pos) or grid_tgt.collidepoint(ev.pos)):
+            hm = self.hm_sim if grid_sim.collidepoint(ev.pos) else self.hm_tgt
+            b = hm.bin_at(*ev.pos)
             if b:
                 self.map_click(*b)
             return
@@ -541,6 +585,7 @@ class Game:
                     self.paint = B_TYPE if s.poly.types[i] == A_TYPE else A_TYPE
                     s.poly.set_type(i, self.paint)
             return
+
         if ev.type == pygame.MOUSEMOTION:
             mx, my = ev.pos
             self.view.hover = self.view.pick(s.poly.pos, rect, mx, my) \
@@ -563,6 +608,7 @@ class Game:
                     tgt = np.clip(tgt, -s.poly.box, s.poly.box)
                     s.poly.grab = (i, tgt)
             return
+
         if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
             self.orbiting = False
             self.paint = None
@@ -710,14 +756,10 @@ class Game:
             if n == "Exit Lab":
                 self.state = MENU
                 self.lab = None
-            elif n == "Loops":
-                lab.mode = "loop"
-            elif n == "Compartments":
-                lab.mode = "comp"
             elif n == "Pause":
                 lab.paused = not lab.paused
             elif n == "Randomize":
-                lab.randomize_pattern()
+                lab.randomize_all()
             elif n == "Reset":
                 self.lab = LabSession(n=lab.poly.n,
                                     seed=int(np.random.default_rng().integers(1, 9999)))
@@ -1254,33 +1296,6 @@ class Game:
             self.lab_view.pending = None
             return
 
-        # map click: toggle a loop
-        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and grid_a.collidepoint(ev.pos):
-            b = self.hm_lab_a.bin_at(*ev.pos)
-            if b and lab.mode == "loop" and b[0] != b[1]:
-                lo, hi = min(b), max(b)
-                if lab.poly.valid_loop(lo, hi):
-                    lab.poly.toggle_loop(lo, hi)
-                    self.say(f"loop ({lo},{hi}) toggled")
-                else:
-                    self.say(f"anchors must be at least {MIN_LOOP_SPAN} beads apart")
-            return
-
-        # ribbon: click/drag to paint compartments
-        if ribbon and ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
-                and ribbon.collidepoint(ev.pos):
-            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
-            if i is not None and lab.mode == "comp":
-                lab.poly.flip_type(i)
-                self.paint = int(lab.poly.types[i])
-            return
-        if ribbon and ev.type == pygame.MOUSEMOTION and ev.buttons[0] \
-                and self.paint is not None and ribbon.collidepoint(ev.pos):
-            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
-            if i is not None and lab.mode == "comp":
-                lab.poly.set_type(i, self.paint)
-            return
-
         # 3D view: click bead to flip/loop, drag to move, drag empty space to orbit
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             if not rect.collidepoint(ev.pos):
@@ -1319,20 +1334,17 @@ class Game:
                 self.dragged = False
                 self.press = None
                 return
-            if self.press is not None:
-                i, _ = self.press
-                self.press = None
-                if lab.mode == "loop":
-                    if self.lab_view.pending is None:
-                        self.lab_view.pending = i
-                    elif self.lab_view.pending == i:
-                        self.lab_view.pending = None
-                    else:
-                        a = self.lab_view.pending
-                        self.lab_view.pending = None
-                        lab.poly.toggle_loop(*sorted((a, i)))
-                else:
-                    lab.poly.flip_type(i)
+        if self.press is not None:
+            i, _ = self.press
+            self.press = None
+            if self.lab_view.pending is None:
+                self.lab_view.pending = i
+            elif self.lab_view.pending == i:
+                self.lab_view.pending = None
+            else:
+                a = self.lab_view.pending
+                self.lab_view.pending = None
+                lab.poly.toggle_loop(*sorted((a, i)))
 
     def ribbon_bin_n(self, mx: int, n: int) -> int | None:
         r = self.rects.get("ribbon")
@@ -1382,18 +1394,13 @@ class Game:
                     col=theme.ROYAL_RED, bold=True)
         widgets.label(sc, "free-play sandbox — every parameter is live", 16, 27,
                     size=11, col=theme.TEXT_FAINT)
-        bl = widgets.Button((260, 12, 104, 32), "Loops", key="L", accent=theme.GREEN)
-        bc = widgets.Button((370, 12, 138, 32), "Compartments", key="C", accent=theme.CYAN)
-        bl.active = lab.mode == "loop"
-        bc.active = lab.mode == "comp"
-        bp = widgets.Button((516, 12, 100, 32), "Pause" if not lab.paused else "Resume",
-                            key="SPACE")
+        bp = widgets.Button((260, 12, 100, 32), "Pause" if not lab.paused else "Resume",
+                    key="SPACE")
         bp.active = lab.paused
-        br = widgets.Button((624, 12, 100, 32), "Randomize")
-        brs = widgets.Button((732, 12, 90, 32), "Reset")
+        br = widgets.Button((368, 12, 100, 32), "Randomize")
+        brs = widgets.Button((476, 12, 90, 32), "Reset")
         bx = widgets.Button((W - 120, 12, 104, 32), "Exit Lab", key="ESC")
-        for k, b in (("lab_loops", bl), ("lab_comp", bc), ("lab_pause", bp),
-                    ("lab_rand", br), ("lab_reset", brs), ("lab_exit", bx)):
+        for k, b in (("lab_pause", bp), ("lab_rand", br), ("lab_reset", brs), ("lab_exit", bx)):
             self.buttons[k] = b
             b.draw(sc)
 
@@ -1401,8 +1408,8 @@ class Game:
         fr = R["footer"]
         pygame.draw.rect(sc, theme.INK, fr)
         pygame.draw.line(sc, theme.RULE, (0, fr.y), (W, fr.y), 1)
-        hint = ("LOOPS  click a cell on the left map, or two beads in 3D  ·  "
-                "COMPARTMENTS  paint the ribbon or click a bead")
+        hint = ("click any cell on a map to tie/untie a loop  ·  paint the ribbon to set compartments  ·  "
+                "shift+click a bead in 3D to flip it")
         widgets.label(sc, hint, 16, fr.y + 9, size=11, col=theme.TEXT_DIM)
 
         # ---- 3D view
@@ -1446,19 +1453,14 @@ class Game:
         # bead-count control, pinned at the top (not part of the scroll)
         from .physics import N_MIN, N_MAX
         n = lab.poly.n
-        widgets.eyebrow(sc, f"beads: {n}  (min {N_MIN} · max {N_MAX})",
-                        x, panel_rect.y + 14, theme.ROYAL_RED)
-        bm1 = widgets.Button((panel_rect.right - 220, panel_rect.y + 8, 44, 28), "-10")
-        bm2 = widgets.Button((panel_rect.right - 172, panel_rect.y + 8, 40, 28), "-1 bead")
-        bp1 = widgets.Button((panel_rect.right - 88, panel_rect.y + 8, 40, 28), "+1 bead")
-        bp2 = widgets.Button((panel_rect.right - 44, panel_rect.y + 8, 40, 28), "+10")
-        bm1.enabled = n > N_MIN
-        bm2.enabled = n > N_MIN
-        bp1.enabled = n < N_MAX
-        bp2.enabled = n < N_MAX
-        for k, b in (("bead_m10", bm1), ("bead_m1", bm2), ("bead_p1", bp1), ("bead_p10", bp2)):
-            self.buttons[k] = b
-            b.draw(sc)
+        widgets.eyebrow(sc, f"beads: {n}", x, panel_rect.y + 14, theme.ROYAL_RED)
+        widgets.label(sc, f"min {N_MIN} · max {N_MAX}", x, panel_rect.y + 30,
+                    size=10, col=theme.TEXT_FAINT, mono=True)
+        if self.lab_bead_field is None or self.lab_bead_field.value != n:
+            self.lab_bead_field = widgets.TextField(
+                (panel_rect.right - 100, panel_rect.y + 6, 80, 30), n, N_MIN, N_MAX)
+        self.lab_bead_field.rect.topleft = (panel_rect.right - 100, panel_rect.y + 6)
+        self.lab_bead_field.draw(sc)
 
         y += int(46 * S)
         clip_top = y

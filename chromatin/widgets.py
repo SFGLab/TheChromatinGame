@@ -5,6 +5,7 @@ import math
 
 import numpy as np
 import pygame
+import time
 
 from . import colormaps as cm
 from . import theme
@@ -153,7 +154,71 @@ def colorbars(surf, rect, sc: Scale, mode: str):
         label(surf, f"{-sc.cap:+.2f}", x, rect.y + 20, size=9, col=theme.TEXT_FAINT, mono=True)
         label(surf, f"{sc.cap:+.2f}", x + 116, rect.y + 20, size=9,
               col=theme.TEXT_FAINT, mono=True, right=True)
+        
+class TextField:
+    """A click-to-focus integer input. Type digits, Enter commits, Escape
+    cancels, click elsewhere commits. Clamped to [lo, hi] on commit."""
 
+    def __init__(self, rect, value: int, lo: int, hi: int):
+        self.rect = pygame.Rect(rect)
+        self.lo, self.hi = lo, hi
+        self.value = int(value)
+        self.text = str(self.value)
+        self.focused = False
+        self.enabled = True
+
+    def _commit(self) -> int | None:
+        try:
+            v = int(self.text)
+        except ValueError:
+            v = self.value
+        v = max(self.lo, min(self.hi, v))
+        changed = v != self.value
+        self.value = v
+        self.text = str(v)
+        return v if changed else None
+
+    def handle(self, ev):
+        """Returns the new int value the frame it's committed, else None."""
+        if not self.enabled:
+            return None
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            was_focused = self.focused
+            self.focused = self.rect.collidepoint(ev.pos)
+            if was_focused and not self.focused:
+                return self._commit()
+            if self.focused:
+                self.text = str(self.value)
+            return None
+        if not self.focused or ev.type != pygame.KEYDOWN:
+            return None
+        if ev.key == pygame.K_RETURN or ev.key == pygame.K_KP_ENTER:
+            self.focused = False
+            return self._commit()
+        if ev.key == pygame.K_ESCAPE:
+            self.text = str(self.value)
+            self.focused = False
+            return None
+        if ev.key == pygame.K_BACKSPACE:
+            self.text = self.text[:-1]
+            return None
+        if ev.unicode.isdigit() and len(self.text) < 5:
+            self.text = (self.text + ev.unicode).lstrip("0") or "0"
+        return None
+
+    def draw(self, sc) -> None:
+        r = self.rect
+        col = theme.CYAN if self.focused else theme.RULE
+        pygame.draw.rect(sc, theme.PANEL, r, border_radius=5)
+        pygame.draw.rect(sc, col, r, 2 if self.focused else 1, border_radius=5)
+        f = theme.font(13, mono=True)
+        shown = self.text if self.focused else str(self.value)
+        img = f.render(shown, True, theme.TEXT)
+        sc.blit(img, (r.x + 10, r.centery - img.get_height() // 2))
+        if self.focused:
+            cx = r.x + 10 + img.get_width() + 2
+            if int(time.time() * 2) % 2 == 0:
+                pygame.draw.line(sc, theme.CYAN, (cx, r.y + 6), (cx, r.bottom - 6), 2)
 
 class Heatmap:
     """A square Hi-C panel. Default view is split: contact frequency below the
@@ -368,7 +433,12 @@ def big_score(surf, rect, value, caption, accent=theme.CYAN):
     
 class Slider:
     """A draggable horizontal parameter control: label above, track + handle,
-    current value on the right. Click or drag anywhere on the track to set it."""
+    current value on the right. Grabbing the handle is forgiving -- the hit
+    area extends well above and below the thin track so the small handle
+    circle is easy to catch, and dragging keeps tracking even if the mouse
+    drifts off the track vertically."""
+
+    GRAB_PAD = 10     # extra vertical hit-tolerance around the track
 
     def __init__(self, rect, label: str, value: float, lo: float, hi: float,
                 step: float | None = None, fmt: str = "{:.3f}", integer: bool = False):
@@ -381,7 +451,11 @@ class Slider:
         self.integer = integer
         self.dragging = False
         self.enabled = True
-        self.key = ""          # set by the caller: which SimParams field this drives
+        self.key = ""
+
+    def _grab_rect(self) -> pygame.Rect:
+        r = self.rect
+        return pygame.Rect(r.x - 4, r.y - self.GRAB_PAD, r.w + 8, r.h + 2 * self.GRAB_PAD)
 
     def _value_at(self, x: int) -> float:
         t = (x - self.rect.x) / max(1, self.rect.w)
@@ -398,13 +472,15 @@ class Slider:
         if not self.enabled:
             return False
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
-                and self.rect.collidepoint(ev.pos):
+                and self._grab_rect().collidepoint(ev.pos):
             self.dragging = True
             new = self._value_at(ev.pos[0])
             changed, self.value = new != self.value, new
             return changed
         if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
             self.dragging = False
+        # once dragging, track x-position unconditionally -- no vertical
+        # collidepoint gate, so a fast or sloppy drag never "drops" the handle
         if ev.type == pygame.MOUSEMOTION and self.dragging:
             new = self._value_at(ev.pos[0])
             changed, self.value = new != self.value, new
@@ -429,5 +505,8 @@ class Slider:
         fw = int(track.w * max(0.0, min(1.0, t)))
         pygame.draw.rect(sc, col, (track.x, track.y, fw, track.h), border_radius=3)
         hx = track.x + fw
-        pygame.draw.circle(sc, theme.TEXT, (hx, track.centery), 7)
-        pygame.draw.circle(sc, col, (hx, track.centery), 7, 2)
+        # handle grows slightly while being dragged -- visual confirmation
+        # that the grab registered
+        radius = 9 if self.dragging else 7
+        pygame.draw.circle(sc, theme.TEXT, (hx, track.centery), radius)
+        pygame.draw.circle(sc, col, (hx, track.centery), radius, 2)
