@@ -32,7 +32,7 @@ DEFAULT_SETTINGS = {
     "fullscreen": False,
 }
 
-MENU, SETTINGS, LOADING, PLAY, SETTLE, RESULTS = "menu", "settings", "loading", "play", "settle", "results"
+MENU, SETTINGS, LOADING, PLAY, SETTLE, RESULTS, LAB = "menu", "settings", "loading", "play", "settle", "results", "lab"
 
 P_LOOP, P_COMP = 0, 1
 PLAYER_NAME = ["Loop player", "Compartment player"]
@@ -43,6 +43,40 @@ PLAYER_ACCENT = [theme.GREEN, theme.MAGENTA]
 MEAS_BURN, MEAS_SAMPLES, MEAS_EVERY = 2500, 520, 20
 LIVE_ALPHA = 0.006
 
+# (SimParams field, display label, lo, hi, step, format, is_integer)
+LAB_PARAM_GROUPS = [
+    ("Langevin integrator", [
+        ("dt",              "timestep  dt",       0.001, 0.02, 0.001, "{:.3f}", False),
+        ("gamma",            "friction  γ",         0.1,  10.0, 0.1,   "{:.2f}", False),
+        ("kT",               "temperature  kT",     0.1,   3.0, 0.1,  "{:.2f}", False),
+        ("steps_per_frame",  "steps / frame",       5,   200,   5,     "{:d}",   True),
+    ]),
+    ("Backbone & bending", [
+        ("b0",       "bond length  b0",     0.5,  2.0, 0.05, "{:.2f}", False),
+        ("k_bond",   "bond stiffness",       20,  500,  5,   "{:.0f}", False),
+        ("k_angle",  "bending  k_angle",     0.0, 100.0, 5, "{:.1f}", False),
+    ]),
+    ("Loops & the player's hand", [
+        ("k_loop",   "loop stiffness",       5,   150,  5,   "{:.0f}", False),
+        ("k_grab",   "hand stiffness",       10,  200,  5,   "{:.0f}", False),
+    ]),
+    ("Excluded volume", [
+        ("ev_eps",   "EV height  ε",         5,   150,  5,   "{:.0f}", False),
+        ("ev_rc",    "EV diameter  rc",      0.6,  2.0, 0.05, "{:.2f}", False),
+    ]),
+    ("Compartments (copolymer)", [
+        ("sigma",      "attraction range σ",   0.5,  2.5, 0.1, "{:.2f}", False),
+        ("eps_AA",     "A–A  ε",               0.0,  4.0, 0.25, "{:.2f}", False),
+        ("eps_BB",     "B–B  ε",               0.0,  4.0, 0.25, "{:.2f}", False),
+        ("eps_AB",     "A–B  ε",              -1.0,  1.0, 0.25, "{:.2f}", False),
+        ("eps_domain", "loop-domain bonus",    0.0,  1.0, 0.25, "{:.2f}", False),
+    ]),
+    ("Confinement & contact call", [
+        ("k_wall",     "wall stiffness",     5,   200,  5,    "{:.0f}", False),
+        ("contact_rc", "contact cutoff",     0.8,  3.0, 0.1, "{:.2f}", False),
+        ("contact_w",  "contact softness",   0.02, 0.5, 0.05, "{:.2f}", False),
+    ]),
+]
 
 def load_records() -> dict:
     try:
@@ -133,6 +167,95 @@ class Session:
             return None
         return max(0.0, self.turn_seconds - (time.time() - self.turn_start))
 
+class LabSession:
+    """Chromatin MiNI-Lab: no target, no scoring -- just a live polymer whose
+    every force-field parameter and bead count you can change on the fly."""
+
+    def __init__(self, n: int, seed: int):
+        self.seed = seed
+        self.params = SimParams()
+        self.poly = Polymer(n, self.params, seed=seed)
+
+        rng = np.random.default_rng(seed)
+        t = np.empty(n, dtype=np.int8)
+        i, cur = 0, A_TYPE
+        while i < n:
+            L = int(rng.integers(3, 7))
+            t[i:i + L] = cur
+            cur = -cur
+            i += L
+        loops = [(2, min(n - 3, max(6, n // 2)))] if n >= 12 else []
+        self.poly.load_config(t, loops)
+
+        self.mode = "loop"        # "loop" | "comp"
+        self.paused = False
+        self.paint: int | None = None
+        self.P_live = self.poly.contacts()
+        self.C_live = None
+        self.e1_live = None
+        self.scale: widgets.Scale | None = None
+        self._frame = 0
+        self._refresh(rebuild_scale=True)
+
+    def _refresh(self, rebuild_scale: bool = False) -> None:
+        oe, C, e1 = an.pipeline(self.P_live, self.poly.types.astype(float))
+        self.C_live, self.e1_live = C, e1
+        # Rescale the colour range from the live map itself -- this is what
+        # makes the heatmaps visibly "breathe" as you drag a slider. Throttled
+        # to every few frames so the colours don't flicker every tick.
+        if rebuild_scale or (self._frame % 6 == 0):
+            self.scale = widgets.Scale(self.P_live, C)
+
+    def step(self) -> None:
+        if self.paused:
+            return
+        self.poly.step(self.poly.p.steps_per_frame)
+        c = self.poly.contacts()
+        self.P_live = 0.985 * self.P_live + 0.015 * c
+        self._frame += 1
+        self._refresh()
+
+    def apply_param(self, key: str, value) -> None:
+        import dataclasses
+        self.params = dataclasses.replace(self.params, **{key: value})
+        self.poly.set_params(self.params)
+
+    def randomize_pattern(self) -> None:
+        n = self.poly.n
+        rng = np.random.default_rng(np.random.default_rng().integers(1, 999999))
+        t = np.empty(n, dtype=np.int8)
+        i, cur = 0, A_TYPE
+        while i < n:
+            L = int(rng.integers(3, 7))
+            t[i:i + L] = cur
+            cur = -cur
+            i += L
+        self.poly.load_config(t, [])
+        self._refresh(rebuild_scale=True)
+
+    def set_bead_count(self, new_n: int) -> None:
+        from .physics import N_MIN, N_MAX
+        new_n = int(np.clip(new_n, N_MIN, N_MAX))
+        if new_n == self.poly.n:
+            return
+        old_types, old_loops = self.poly.clone_config()
+        old_n = self.poly.n
+
+        if new_n < old_n:
+            types = old_types[:new_n].copy()
+            # any loop touching a removed bead is dropped -- this is the
+            # "if he removes some beads, the forces that used them go too"
+            # behaviour you asked for.
+            loops = [(i, j) for (i, j) in old_loops if j < new_n]
+        else:
+            fill = old_types[-1] if old_n else A_TYPE
+            types = np.concatenate([old_types, np.full(new_n - old_n, fill, dtype=np.int8)])
+            loops = list(old_loops)
+
+        self.poly = Polymer(new_n, self.params, seed=self.seed)
+        self.poly.load_config(types, loops)
+        self.P_live = self.poly.contacts()
+        self._refresh(rebuild_scale=True)
 
 class Game:
     def __init__(self):
@@ -165,6 +288,13 @@ class Game:
         self._scale: widgets.Scale | None = None
         self.toast = ""
         self.toast_t = 0.0
+
+        self.lab: LabSession | None = None
+        self.lab_view = PolymerView()
+        self.hm_lab_a = widgets.Heatmap("contact  ·  reds")
+        self.hm_lab_b = widgets.Heatmap("correlation  ·  coolwarm")
+        self.lab_sliders: dict[str, widgets.Slider] = {}
+        self.lab_scroll = 0
 
         # workers
         self._work_progress = [0.0]
@@ -244,6 +374,11 @@ class Game:
                     self.on_button(b)
             if self.state == PLAY and not self.show_help:
                 self.on_play_mouse(ev)
+            if self.state == LAB and self.lab is not None:
+                for sl in self.lab_sliders.values():
+                    if sl.handle(ev):
+                        self.lab.apply_param(sl.key, sl.value)
+                self.on_lab_mouse(ev)
 
     def on_key(self, ev):
         k = ev.key
@@ -257,6 +392,9 @@ class Game:
             elif self.state in (PLAY, RESULTS):
                 self.state = MENU
                 self.session = None
+            elif self.state == LAB:
+                self.state = MENU
+                self.lab = None
             else:
                 self.running = False
             return
@@ -293,6 +431,16 @@ class Game:
             if k == pygame.K_RETURN:
                 self.state = MENU
                 self.session = None
+            return
+        
+        if self.state == LAB:
+            lab = self.lab
+            if k == pygame.K_l:
+                lab.mode = "loop"
+            elif k == pygame.K_c:
+                lab.mode = "comp"
+            elif k == pygame.K_SPACE:
+                lab.paused = not lab.paused
             return
 
         if self.state != PLAY:
@@ -494,6 +642,8 @@ class Game:
                 self.sel_two = True
             elif n == "How to play":
                 self.show_help = True
+            elif n == "Chromatin MiNI-Lab":
+                self.start_lab()
             elif n == "Quit":
                 self.running = False
             elif n == "Settings":
@@ -555,6 +705,30 @@ class Game:
                         self.settings["fullscreen"] = False
                         self.apply_display_settings()
                         break
+        elif self.state == LAB:
+            lab = self.lab
+            if n == "Exit Lab":
+                self.state = MENU
+                self.lab = None
+            elif n == "Loops":
+                lab.mode = "loop"
+            elif n == "Compartments":
+                lab.mode = "comp"
+            elif n == "Pause":
+                lab.paused = not lab.paused
+            elif n == "Randomize":
+                lab.randomize_pattern()
+            elif n == "Reset":
+                self.lab = LabSession(n=lab.poly.n,
+                                    seed=int(np.random.default_rng().integers(1, 9999)))
+            elif n == "+1 bead":
+                lab.set_bead_count(lab.poly.n + 1)
+            elif n == "-1 bead":
+                lab.set_bead_count(lab.poly.n - 1)
+            elif n == "+10":
+                lab.set_bead_count(lab.poly.n + 10)
+            elif n == "-10":
+                lab.set_bead_count(lab.poly.n - 10)
 
     # =========================================================== session flow
     def start_session(self):
@@ -573,6 +747,12 @@ class Game:
         self._work_thread = threading.Thread(target=worker, daemon=True)
         self._work_thread.start()
         self.music.start_if_idle()
+
+    def start_lab(self) -> None:
+        seed = int(np.random.default_rng().integers(1, 9999))
+        self.lab = LabSession(n=40, seed=seed)
+        self.lab_scroll = 0
+        self.state = LAB
 
     def begin_measure(self):
         s = self.session
@@ -672,6 +852,11 @@ class Game:
             self.demo_view.cam.yaw += dt * 0.22
             return
 
+        if self.state == LAB:
+            if not self.show_help:
+                self.lab.step()
+            return
+
         if self.state != PLAY:
             return
 
@@ -713,26 +898,45 @@ class Game:
                 self.draw_settle_overlay(W, H)
         elif self.state == RESULTS:
             self.draw_results(W, H)
+        elif self.state == LAB:
+            self.draw_lab(W, H)
 
         if self.show_help:
             self.draw_help(W, H)
         self.draw_toast(W, H)
 
     def compute_layout(self, W, H):
-        P = theme.PAD
-        body = pygame.Rect(0, theme.HEADER_H, W, H - theme.HEADER_H - theme.FOOTER_H)
-        right_w = max(600, int(W * 0.44))
+        S = getattr(theme, "FONT_SCALE", 1.0)
+
+        P     = int(theme.PAD * S)
+        hdr_h = int(theme.HEADER_H * S)
+        ftr_h = int(theme.FOOTER_H * S)
+
+        right_frac = 0.45 + (S - 1.0) * 0.10 
+        right_w = max(int(620 * S), int(W * right_frac))
+
+        body = pygame.Rect(0, hdr_h, W, H - hdr_h - ftr_h)
         view = pygame.Rect(P, body.y + P, W - right_w - P, body.h - 2 * P)
-        right = pygame.Rect(view.right + P, body.y + P, right_w - 2 * P, body.h - 2 * P)
+        right = pygame.Rect(view.right + P, body.y + P,
+                        right_w - 2 * P, body.h - 2 * P)
+
+        
+        title_h = int(30 * S)
+        label_h = int(22 * S)
+        inner   = int(32 * S)
+
         hm_w = (right.w - P) // 2
-        side = hm_w - 32
-        hm_h = 30 + side + 22
+        side = max(80, hm_w - inner)
+        hm_h = title_h + side + label_h
+
         self.rects = {
-            "header": pygame.Rect(0, 0, W, theme.HEADER_H),
-            "footer": pygame.Rect(0, H - theme.FOOTER_H, W, theme.FOOTER_H),
-            "body": body, "view": view, "right": right,
-            "tgt": pygame.Rect(right.x, right.y, hm_w, hm_h),
-            "sim": pygame.Rect(right.x + hm_w + P, right.y, hm_w, hm_h),
+            "header": pygame.Rect(0, 0, W, hdr_h),
+            "footer": pygame.Rect(0, H - ftr_h, W, ftr_h),
+            "body":   body,
+            "view":   view,
+            "right":  right,
+            "tgt":    pygame.Rect(right.x, right.y, hm_w, hm_h),
+            "sim":    pygame.Rect(right.x + hm_w + P, right.y, hm_w, hm_h),
         }
 
     def paint_background(self, W, H):
@@ -766,15 +970,15 @@ class Game:
         f = theme.font(64, bold=True)
         sc.blit(f.render("THE CHROMATIN", True, theme.TEXT), (x - 3, y + 18))
         f2 = theme.font(64, bold=True)
-        sc.blit(f2.render("       GAME", True, theme.GREEN), (x - 3, y + 78))
-        widgets.label(sc, "Build the fold. Match the map.", x, y + 152, size=16,
+        sc.blit(f2.render("       GAME", True, theme.GREEN), (x - 3, y + 88))
+        widgets.label(sc, "Build the fold. Match the map.", x, y + 182, size=16,
                       col=theme.TEXT_DIM)
 
         # level chooser
-        y2 = y + 196
+        y2 = y + 222
         widgets.eyebrow(sc, "locus", x, y2)
         for i, lvl in enumerate(LEVELS):
-            r = pygame.Rect(x, y2 + 18 + i * 34, 340, 28)
+            r = pygame.Rect(x, y2 + 22 + i * 46, 340, 28)
             b = widgets.Button(r, lvl.name, size=13)
             b.active = (i == self.sel_level)
             self.buttons[f"lvl{i}"] = b
@@ -788,9 +992,9 @@ class Game:
                               col=theme.AMBER, mono=True)
 
         # mode
-        y3 = y2 + 18 + len(LEVELS) * 34 + 16
+        y3 = y2 + 18 + len(LEVELS) * 42 + 16
         widgets.eyebrow(sc, "mode", x, y3)
-        b1 = widgets.Button((x, y3 + 18, 110, 30), "Solo")
+        b1 = widgets.Button((x, y3 + 22, 110, 30), "Solo")
         b1.active = not self.sel_two
         b2 = widgets.Button((x + 118, y3 + 18, 110, 30), "Versus", accent=theme.MAGENTA)
         b2.active = self.sel_two
@@ -832,6 +1036,15 @@ class Game:
         if m.has_music:
             widgets.label(sc, f"{len(m.tracks)} track(s)  ·  M mute  ·  N next",
                           x, H - 36, size=11, col=theme.TEXT_FAINT, mono=True)
+            
+        y5 = y4 + 56
+        blab = widgets.Button((x, y5, 260, 42), "Chromatin MiNI-Lab", size=15,
+                            accent=theme.ROYAL_RED)
+        blab.active = True
+        self.buttons["lab"] = blab
+        blab.draw(sc)
+        widgets.label(sc, "free-play sandbox — every force, every parameter, live",
+                    x + 272, y5 + 14, size=11, col=theme.TEXT_FAINT)
             
     # ---------------------------------------------------------------- settings
     def draw_settings(self, W, H):
@@ -1018,6 +1231,260 @@ class Game:
                           R["right"].x, ys + 62, size=11, col=theme.TEXT_FAINT, mono=True)
         widgets.colorbars(sc, pygame.Rect(R["right"].x, ys + 92, R["right"].w, 30),
                           self._scale, s.map_mode)
+        
+    def on_lab_mouse(self, ev):
+        lab = self.lab
+        if lab is None or "view" not in self.rects:
+            return
+        rect = self.rects["view"]
+        ribbon = self.rects.get("ribbon")
+        grid_a = self.hm_lab_a.grid
+
+        if ev.type == pygame.MOUSEWHEEL:
+            if rect.collidepoint(self.mouse):
+                self.lab_view.cam.zoom(ev.y)
+                return
+            panel_r = self.rects.get("panel")
+            if panel_r and panel_r.collidepoint(self.mouse):
+                content_h = getattr(self, "_lab_panel_content_h", 0)
+                self.lab_scroll = max(0, min(self.lab_scroll - ev.y * 30,
+                                            max(0, content_h - panel_r.h)))
+            return
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
+            self.lab_view.pending = None
+            return
+
+        # map click: toggle a loop
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and grid_a.collidepoint(ev.pos):
+            b = self.hm_lab_a.bin_at(*ev.pos)
+            if b and lab.mode == "loop" and b[0] != b[1]:
+                lo, hi = min(b), max(b)
+                if lab.poly.valid_loop(lo, hi):
+                    lab.poly.toggle_loop(lo, hi)
+                    self.say(f"loop ({lo},{hi}) toggled")
+                else:
+                    self.say(f"anchors must be at least {MIN_LOOP_SPAN} beads apart")
+            return
+
+        # ribbon: click/drag to paint compartments
+        if ribbon and ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
+                and ribbon.collidepoint(ev.pos):
+            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
+            if i is not None and lab.mode == "comp":
+                lab.poly.flip_type(i)
+                self.paint = int(lab.poly.types[i])
+            return
+        if ribbon and ev.type == pygame.MOUSEMOTION and ev.buttons[0] \
+                and self.paint is not None and ribbon.collidepoint(ev.pos):
+            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
+            if i is not None and lab.mode == "comp":
+                lab.poly.set_type(i, self.paint)
+            return
+
+        # 3D view: click bead to flip/loop, drag to move, drag empty space to orbit
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            if not rect.collidepoint(ev.pos):
+                return
+            i = self.lab_view.pick(lab.poly.pos, rect, *ev.pos)
+            if i is None:
+                self.orbiting = True
+                self.press = None
+            else:
+                self.press = (i, ev.pos)
+                self.dragged = False
+            return
+        if ev.type == pygame.MOUSEMOTION:
+            mx, my = ev.pos
+            self.lab_view.hover = self.lab_view.pick(lab.poly.pos, rect, mx, my) \
+                if rect.collidepoint(mx, my) else None
+            if self.orbiting and (ev.buttons[0] or ev.buttons[2]):
+                self.lab_view.cam.orbit(ev.rel[0], ev.rel[1])
+            elif self.press is not None and ev.buttons[0]:
+                i, p0 = self.press
+                if not self.dragged and math.hypot(mx - p0[0], my - p0[1]) > 5:
+                    self.dragged = True
+                    self.lab_view.dragging = i
+                if self.dragged:
+                    _, depth = self.lab_view.screen_positions(lab.poly.pos, rect)
+                    tgt = self.lab_view.cam.unproject(mx, my, float(depth[i]),
+                                                    rect.centerx, rect.centery)
+                    tgt = np.clip(tgt, -lab.poly.box, lab.poly.box)
+                    lab.poly.grab = (i, tgt)
+            return
+        if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+            self.orbiting = False
+            if self.dragged:
+                lab.poly.grab = None
+                self.lab_view.dragging = None
+                self.dragged = False
+                self.press = None
+                return
+            if self.press is not None:
+                i, _ = self.press
+                self.press = None
+                if lab.mode == "loop":
+                    if self.lab_view.pending is None:
+                        self.lab_view.pending = i
+                    elif self.lab_view.pending == i:
+                        self.lab_view.pending = None
+                    else:
+                        a = self.lab_view.pending
+                        self.lab_view.pending = None
+                        lab.poly.toggle_loop(*sorted((a, i)))
+                else:
+                    lab.poly.flip_type(i)
+
+    def ribbon_bin_n(self, mx: int, n: int) -> int | None:
+        r = self.rects.get("ribbon")
+        if not r:
+            return None
+        i = int((mx - r.x) / r.w * n)
+        return i if 0 <= i < n else None
+    
+    def compute_lab_layout(self, W, H):
+        S = getattr(theme, "FONT_SCALE", 1.0)
+        P = int(theme.PAD * S)
+        hdr_h = int(theme.HEADER_H * S)
+        ftr_h = int(theme.FOOTER_H * S)
+        body = pygame.Rect(0, hdr_h, W, H - hdr_h - ftr_h)
+
+        panel_w = max(340, int(W * 0.27))                # parameter panel, right side
+        left = pygame.Rect(P, body.y + P, W - panel_w - P, body.h - 2 * P)
+        panel = pygame.Rect(left.right + P, body.y + P, panel_w - 2 * P, body.h - 2 * P)
+
+        view_h = int(left.h * 0.55)
+        view = pygame.Rect(left.x, left.y, left.w, view_h)
+        maps_y = view.bottom + P
+        hm_w = (left.w - P) // 2
+        hm_h = left.bottom - maps_y
+
+        self.rects = {
+            "header": pygame.Rect(0, 0, W, hdr_h),
+            "footer": pygame.Rect(0, H - ftr_h, W, ftr_h),
+            "view": view,
+            "map_a": pygame.Rect(left.x, maps_y, hm_w, hm_h),
+            "map_b": pygame.Rect(left.x + hm_w + P, maps_y, hm_w, hm_h),
+            "panel": panel,
+        }
+
+    def draw_lab(self, W, H):
+        sc = self.screen
+        lab = self.lab
+        self.buttons = {}
+        self.compute_lab_layout(W, H)
+        R = self.rects
+
+        # ---- header
+        r = R["header"]
+        pygame.draw.rect(sc, theme.INK, r)
+        pygame.draw.line(sc, theme.RULE, (0, r.bottom - 1), (W, r.bottom - 1), 1)
+        widgets.label(sc, "CHROMATIN MiNI-LAB", 16, 9, size=13,
+                    col=theme.ROYAL_RED, bold=True)
+        widgets.label(sc, "free-play sandbox — every parameter is live", 16, 27,
+                    size=11, col=theme.TEXT_FAINT)
+        bl = widgets.Button((260, 12, 104, 32), "Loops", key="L", accent=theme.GREEN)
+        bc = widgets.Button((370, 12, 138, 32), "Compartments", key="C", accent=theme.CYAN)
+        bl.active = lab.mode == "loop"
+        bc.active = lab.mode == "comp"
+        bp = widgets.Button((516, 12, 100, 32), "Pause" if not lab.paused else "Resume",
+                            key="SPACE")
+        bp.active = lab.paused
+        br = widgets.Button((624, 12, 100, 32), "Randomize")
+        brs = widgets.Button((732, 12, 90, 32), "Reset")
+        bx = widgets.Button((W - 120, 12, 104, 32), "Exit Lab", key="ESC")
+        for k, b in (("lab_loops", bl), ("lab_comp", bc), ("lab_pause", bp),
+                    ("lab_rand", br), ("lab_reset", brs), ("lab_exit", bx)):
+            self.buttons[k] = b
+            b.draw(sc)
+
+        # ---- footer
+        fr = R["footer"]
+        pygame.draw.rect(sc, theme.INK, fr)
+        pygame.draw.line(sc, theme.RULE, (0, fr.y), (W, fr.y), 1)
+        hint = ("LOOPS  click a cell on the left map, or two beads in 3D  ·  "
+                "COMPARTMENTS  paint the ribbon or click a bead")
+        widgets.label(sc, hint, 16, fr.y + 9, size=11, col=theme.TEXT_DIM)
+
+        # ---- 3D view
+        widgets.panel(sc, R["view"], fill=theme.INK_2)
+        self.lab_view.draw(sc, R["view"], lab.poly.pos, lab.poly.types, lab.poly.loops,
+                        lab.poly.box, t=time.time() - self.t0, mouse=self.mouse)
+
+        # ---- two heatmaps, pinned modes: reds (contact) + coolwarm (correlation)
+        self.hm_lab_a.layout(R["map_a"], lab.poly.n)
+        self.hm_lab_b.layout(R["map_b"], lab.poly.n)
+        self.hm_lab_a.draw(sc, lab.P_live, lab.C_live, "contact",
+                        loops_player=lab.poly.loops, subtitle="live contact frequency",
+                        accent=theme.ROYAL_RED, live=not lab.paused,
+                        mouse=self.mouse, scale=lab.scale)
+        self.hm_lab_b.draw(sc, lab.P_live, lab.C_live, "corr",
+                        loops_player=lab.poly.loops, subtitle="O/E correlation",
+                        accent=theme.CYAN, live=not lab.paused,
+                        mouse=self.mouse, scale=lab.scale)
+
+        # ---- colour ribbon under the left column
+        g = self.hm_lab_a.grid
+        ry = R["map_a"].bottom + int(10 * getattr(theme, "FONT_SCALE", 1.0))
+        ribbon = pygame.Rect(R["view"].x, ry, R["view"].w, 14)
+        self.rects["ribbon"] = ribbon
+        widgets.type_track(sc, ribbon, lab.poly.types, hover=self.lab_view.hover)
+
+        # ---- parameter panel, scrollable
+        self.draw_lab_panel(R["panel"])
+
+    def draw_lab_panel(self, panel_rect):
+        sc = self.screen
+        lab = self.lab
+        S = getattr(theme, "FONT_SCALE", 1.0)
+        widgets.panel(sc, panel_rect, fill=theme.PANEL)
+
+        x = panel_rect.x + 16
+        y = panel_rect.y + 14 - self.lab_scroll
+        row_h = int(40 * S)
+        self.lab_sliders = {}
+
+        # bead-count control, pinned at the top (not part of the scroll)
+        from .physics import N_MIN, N_MAX
+        n = lab.poly.n
+        widgets.eyebrow(sc, f"beads: {n}  (min {N_MIN} · max {N_MAX})",
+                        x, panel_rect.y + 14, theme.ROYAL_RED)
+        bm1 = widgets.Button((panel_rect.right - 220, panel_rect.y + 8, 44, 28), "-10")
+        bm2 = widgets.Button((panel_rect.right - 172, panel_rect.y + 8, 40, 28), "-1 bead")
+        bp1 = widgets.Button((panel_rect.right - 88, panel_rect.y + 8, 40, 28), "+1 bead")
+        bp2 = widgets.Button((panel_rect.right - 44, panel_rect.y + 8, 40, 28), "+10")
+        bm1.enabled = n > N_MIN
+        bm2.enabled = n > N_MIN
+        bp1.enabled = n < N_MAX
+        bp2.enabled = n < N_MAX
+        for k, b in (("bead_m10", bm1), ("bead_m1", bm2), ("bead_p1", bp1), ("bead_p10", bp2)):
+            self.buttons[k] = b
+            b.draw(sc)
+
+        y += int(46 * S)
+        clip_top = y
+
+        # stability guardrail: dt * k_bond / gamma should stay below ~0.5
+        ratio = lab.params.dt * lab.params.k_bond / lab.params.gamma
+        if ratio > 0.5:
+            widgets.label(sc, f"⚠ dt·k_bond/γ = {ratio:.2f} -- integrator may be unstable",
+                        x, y, size=11, col=theme.POOR, bold=True)
+            y += int(20 * S)
+
+        for group_name, fields in LAB_PARAM_GROUPS:
+            widgets.eyebrow(sc, group_name, x, y, theme.TEXT_DIM)
+            y += int(20 * S)
+            for key, label, lo, hi, step, fmt, is_int in fields:
+                val = getattr(lab.params, key)
+                r = pygame.Rect(x, y + int(14 * S), panel_rect.w - 32, int(8 * S))
+                sl = widgets.Slider(r, label, val, lo, hi, step=step, fmt=fmt, integer=is_int)
+                sl.key = key
+                self.lab_sliders[key] = sl
+                if panel_rect.y <= y <= panel_rect.bottom:   # only draw visible rows
+                    sl.draw(sc)
+                y += row_h
+            y += int(10 * S)
+
+        self._lab_panel_content_h = y - clip_top + self.lab_scroll
 
     def draw_view_hud(self, rect):
         sc = self.screen
@@ -1063,54 +1530,93 @@ class Game:
         pygame.draw.rect(sc, theme.INK, r)
         pygame.draw.line(sc, theme.RULE, (0, r.bottom - 1), (W, r.bottom - 1), 1)
 
-        widgets.label(sc, "THE CHROMATIN GAME", 16, 9, size=13, col=theme.TEXT, bold=True)
-        widgets.label(sc, s.level.name, 16, 27, size=11, col=theme.TEXT_FAINT)
+        # Every pixel offset scales with the current font size so the header keeps
+        # its air in Large mode. `S` is 1.0 in Small (identical to before) and
+        # ~1.22 in Large (Settings > font size).
+        S = getattr(theme, "FONT_SCALE", 1.0)
+        btn_h = int(32 * S)                              # button height
+        btn_y = (r.h - btn_h) // 2                        # vertically centred
+        gap   = int(10 * S)                               # gap between buttons
+        edge  = int(16 * S)                               # side margin
 
-        # mode toggles
-        x = 200
-        bl = widgets.Button((x, 12, 104, 32), "Loops", key="L", accent=theme.GREEN)
-        bc = widgets.Button((x + 110, 12, 138, 32), "Compartments", key="C",
-                            accent=theme.CYAN)
-        bl.active = s.mode == "loop"
-        bc.active = s.mode == "comp"
+        # ---- title block, top-left
+        widgets.label(sc, "THE CHROMATIN GAME",
+                    edge, int(9 * S),
+                    size=13, col=theme.TEXT, bold=True)
+        widgets.label(sc, s.level.name,
+                    edge, int(29 * S),
+                    size=11, col=theme.TEXT_FAINT)
+
+        # ---- mode toggles: sized to their text so bigger fonts don't get clipped
+        x = int(220 * S)
+        w_loops = int(108 * S)
+        w_comp  = int(150 * S)
+        w_view  = int(80 * S)
+
+        bl = widgets.Button((x, btn_y, w_loops, btn_h),
+                            "Loops", key="L", accent=theme.GREEN)
+        bc = widgets.Button((x + w_loops + gap, btn_y, w_comp, btn_h),
+                            "Compartments", key="C", accent=theme.CYAN)
+        bv = widgets.Button((x + w_loops + gap + w_comp + gap, btn_y, w_view, btn_h),
+                            "View", key="V")
+        bl.active  = s.mode == "loop"
+        bc.active  = s.mode == "comp"
         bl.enabled = s.allowed("loop")
         bc.enabled = s.allowed("comp")
-        bv = widgets.Button((x + 256, 12, 76, 32), "View", key="V")
         self.buttons["loops"] = bl
-        self.buttons["comp"] = bc
-        self.buttons["view"] = bv
+        self.buttons["comp"]  = bc
+        self.buttons["view"]  = bv
         for b in (bl, bc, bv):
             b.draw(sc)
 
-        # turn banner
+        modes_right = x + w_loops + gap + w_comp + gap + w_view
+
+        # ---- turn banner (versus mode only)
         if s.two_player:
             acc = PLAYER_ACCENT[s.turn]
-            br = pygame.Rect(x + 348, 12, 250, 32)
-            pygame.draw.rect(sc, theme.lerp_col(acc, theme.INK, 0.75), br, border_radius=6)
+            br_w = int(260 * S)
+            br = pygame.Rect(modes_right + int(20 * S), btn_y, br_w, btn_h)
+            pygame.draw.rect(sc, theme.lerp_col(acc, theme.INK, 0.75), br,
+                            border_radius=6)
             pygame.draw.rect(sc, acc, br, 1, border_radius=6)
-            widgets.label(sc, f"ROUND {min(s.round, s.rounds)}/{s.rounds}  ·  "
-                              f"{PLAYER_SHORT[s.turn]}", br.x + 10, br.y + 9, size=12,
-                          col=acc, mono=True, bold=True)
+            widgets.label(sc,
+                        f"ROUND {min(s.round, s.rounds)}/{s.rounds}  ·  "
+                        f"{PLAYER_SHORT[s.turn]}",
+                        br.x + int(12 * S), br.y + int(9 * S),
+                        size=12, col=acc, mono=True, bold=True)
             tl = s.time_left()
             if tl is not None:
                 col = theme.POOR if tl < 10 else theme.AMBER
-                widgets.label(sc, f"{int(tl // 60)}:{int(tl % 60):02d}", br.right + 12,
-                              br.y + 8, size=15, col=col, mono=True, bold=True)
+                widgets.label(sc,
+                            f"{int(tl // 60)}:{int(tl % 60):02d}",
+                            br.right + int(14 * S), br.y + int(8 * S),
+                            size=15, col=col, mono=True, bold=True)
 
-        # right side
-        bm = widgets.Button((W - 96, 12, 80, 32), "Menu", key="ESC")
-        bq = widgets.Button((W - 132, 12, 30, 32), "?", key="")
-        bmeas = widgets.Button((W - 268, 12, 128, 32),
-                               "End turn" if s.two_player else "Measure",
-                               key="ENTER", accent=theme.AMBER)
+        # ---- right side, laid out from the right edge inward
+        # Order right-to-left: Menu, ?, Measure/End-turn.
+        w_menu  = int(84 * S)
+        w_help  = int(34 * S)
+        w_meas  = int(140 * S)
+
+        bm_x = W - edge - w_menu
+        bq_x = bm_x - gap - w_help
+        bmeas_x = bq_x - gap - w_meas
+
+        bm    = widgets.Button((bm_x,    btn_y, w_menu, btn_h), "Menu",  key="ESC")
+        bq    = widgets.Button((bq_x,    btn_y, w_help, btn_h), "?",     key="")
+        bmeas = widgets.Button((bmeas_x, btn_y, w_meas, btn_h),
+                            "End turn" if s.two_player else "Measure",
+                            key="ENTER", accent=theme.AMBER)
         bmeas.active = True
         for k, b in (("menu", bm), ("helpb", bq), ("measure", bmeas)):
             self.buttons[k] = b
             b.draw(sc)
 
+        # ---- music title, tucked left of the Measure button
         if self.music.has_music:
-            widgets.label(sc, "♪ " + self.music.title()[:28], W - 290, 30, size=10,
-                          col=theme.TEXT_FAINT, right=True)
+            widgets.label(sc, "♪ " + self.music.title()[:28],
+                        bmeas_x - gap, int(30 * S),
+                        size=10, col=theme.TEXT_FAINT, right=True)
 
     def draw_footer(self, W, H):
         sc = self.screen

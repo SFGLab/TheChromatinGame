@@ -365,3 +365,69 @@ def big_score(surf, rect, value, caption, accent=theme.CYAN):
     img = f.render(f"{value:5.1f}", True, theme.score_color(value / 100.0))
     surf.blit(img, (rect.right - img.get_width() - 10,
                     rect.centery - img.get_height() // 2 + 4))
+    
+class Slider:
+    """A draggable horizontal parameter control: label above, track + handle,
+    current value on the right. Click or drag anywhere on the track to set it."""
+
+    def __init__(self, rect, label: str, value: float, lo: float, hi: float,
+                step: float | None = None, fmt: str = "{:.3f}", integer: bool = False):
+        self.rect = pygame.Rect(rect)
+        self.label = label
+        self.value = value
+        self.lo, self.hi = lo, hi
+        self.step = step
+        self.fmt = fmt
+        self.integer = integer
+        self.dragging = False
+        self.enabled = True
+        self.key = ""          # set by the caller: which SimParams field this drives
+
+    def _value_at(self, x: int) -> float:
+        t = (x - self.rect.x) / max(1, self.rect.w)
+        t = max(0.0, min(1.0, t))
+        v = self.lo + t * (self.hi - self.lo)
+        if self.step:
+            v = round(v / self.step) * self.step
+        if self.integer:
+            v = int(round(v))
+        return max(self.lo, min(self.hi, v))
+
+    def handle(self, ev) -> bool:
+        """Returns True the frame the value actually changes."""
+        if not self.enabled:
+            return False
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
+                and self.rect.collidepoint(ev.pos):
+            self.dragging = True
+            new = self._value_at(ev.pos[0])
+            changed, self.value = new != self.value, new
+            return changed
+        if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+            self.dragging = False
+        if ev.type == pygame.MOUSEMOTION and self.dragging:
+            new = self._value_at(ev.pos[0])
+            changed, self.value = new != self.value, new
+            return changed
+        return False
+
+    def draw(self, sc) -> None:
+        r = self.rect
+        S = getattr(theme, "FONT_SCALE", 1.0)
+        f = theme.font(max(10, int(11 * S)), mono=True)
+        col = theme.CYAN if self.enabled else theme.TEXT_FAINT
+
+        img = f.render(self.label, True, theme.TEXT_DIM)
+        sc.blit(img, (r.x, r.y - img.get_height() - 3))
+        vs = self.fmt.format(self.value)
+        vimg = f.render(vs, True, theme.TEXT)
+        sc.blit(vimg, (r.right - vimg.get_width(), r.y - img.get_height() - 3))
+
+        track = pygame.Rect(r.x, r.centery - 3, r.w, 6)
+        pygame.draw.rect(sc, theme.PANEL, track, border_radius=3)
+        t = (self.value - self.lo) / max(1e-9, self.hi - self.lo)
+        fw = int(track.w * max(0.0, min(1.0, t)))
+        pygame.draw.rect(sc, col, (track.x, track.y, fw, track.h), border_radius=3)
+        hx = track.x + fw
+        pygame.draw.circle(sc, theme.TEXT, (hx, track.centery), 7)
+        pygame.draw.circle(sc, col, (hx, track.centery), 7, 2)

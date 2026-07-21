@@ -13,21 +13,22 @@ import pygame
 # --- surfaces -------------------------------------------------------------
 INK        = (10, 13, 22)      # deepest background
 INK_2      = (15, 19, 31)      # viewport background
-PANEL      = (20, 25, 40)
-PANEL_HI   = (29, 36, 56)
-RULE       = (43, 53, 79)      # hairline dividers
-RULE_SOFT  = (32, 40, 60)
+PANEL      = (24, 30, 48)      # was (20, 25, 40) -- lifts panels off INK a touch
+PANEL_HI   = (36, 44, 68)      # was (29, 36, 56)
+RULE       = (58, 70, 100)     # was (43, 53, 79) -- dividers visible without shouting
+RULE_SOFT  = (42, 52, 78)      # was (32, 40, 60)
 
 # --- type -----------------------------------------------------------------
-TEXT       = (223, 230, 244)
-TEXT_DIM   = (140, 153, 184)
-TEXT_FAINT = (92, 103, 132)
+TEXT       = (238, 244, 255)   # was (223, 230, 244) -- primary text, near-white
+TEXT_DIM   = (180, 192, 218)   # was (140, 153, 184) -- secondary labels
+TEXT_FAINT = (140, 155, 188)   # was ( 92, 103, 132) -- captions, hints, mono numbers
 
 # --- instrument accents ---------------------------------------------------
 CYAN       = (92, 200, 255)    # interactive / selection
 AMBER      = (240, 186, 92)    # warnings, timers
 GREEN      = (58, 226, 141)    # loops (Hi-C convention)
 MAGENTA    = (214, 108, 232)   # player two
+ROYAL_RED  = (196, 30, 58)     # the MiNI-Lab button + its accent colour
 
 # --- the science ----------------------------------------------------------
 COMP_A     = (222, 74, 66)     # E1 > 0, red bead, weak attraction  (active)
@@ -45,10 +46,42 @@ FOOTER_H = 34
 PAD = 14
 RADIUS = 8
 
-_MONO_STACK = ["jetbrainsmono", "iosevka", "sfmono", "menlo", "consolas",
-               "dejavusansmono", "liberationmono", "couriernew", "monospace"]
-_UI_STACK = ["inter", "sfprodisplay", "helveticaneue", "segoeui", "roboto",
-             "dejavusans", "liberationsans", "arial", "sans"]
+# Prefer fonts that ship with a strong regular weight or a dedicated Medium.
+_MONO_STACK = [
+    "jetbrainsmonomedium",   # JetBrains Mono Medium -- clean, strong on dark
+    "jetbrainsmono",
+    "firacodemedium",
+    "firacode",
+    "iosevkafixedmedium",
+    "iosevka",
+    "cascadiamono",          # ships with Windows Terminal
+    "sfmono",
+    "menlo",
+    "consolas",
+    "dejavusansmono",
+    "liberationmono",
+    "couriernew",
+    "monospace",
+]
+
+_UI_STACK = [
+    "intermedium",           # Inter Medium -- crisp at small sizes
+    "inter",
+    "robotomedium",
+    "roboto",
+    "sfprodisplaymedium",
+    "sfprodisplay",
+    "segoeuisemibold",       # Windows fallback with visible weight
+    "segoeui",
+    "helveticaneuemedium",
+    "helveticaneue",
+    "notosansmedium",
+    "notosans",
+    "dejavusans",
+    "liberationsans",
+    "arial",
+    "sans",
+]
 
 _cache: dict[tuple, pygame.font.Font] = {}
 

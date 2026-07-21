@@ -20,11 +20,23 @@
     "seed": 1
   },
   "The Story of a TAD": {
-    "best": 32.81,
-    "seed": 1
+    "best": 33.52,
+    "seed": 1970
   },
   "TADs + compartments": {
     "best": 39.09,
     "seed": 1
+  },
+  "A Single Loop": {
+    "best": 74.89,
+    "seed": 7226
+  },
+  "Closer to The sad reality :(": {
+    "best": 16.24,
+    "seed": 7686
+  },
+  "First Contact": {
+    "best": 0.36,
+    "seed": 8145
   }
 }

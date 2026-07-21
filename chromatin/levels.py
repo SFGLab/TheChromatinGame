@@ -30,18 +30,22 @@ class Level:
 
 LEVELS = [
     #                              n  loops  block_min  block_max
-    Level("Couple of Loops",
-          "A and B blocks phase-separate. Paint the ribbon to match the plaid.",
-          20, 6, 3, 5),
-    Level("The Story of a TAD",
-          "Loops pin two beads together and create a bright dot off the diagonal.",
-          35, 10, 5, 6),
-    Level("TADs + compartments",
-          "Loops carve TAD squares on top of the compartment checkerboard.",
-          50, 25, 10, 8),
-    Level("Full locus",
-          "Multiple TADs, fine compartments, nested loops — a real Hi-C puzzle.",
-          100, 40, 15, 12),
+    Level("First Contact",
+          "Two anchors, one bond. Read the corner off the map.",
+          10, 2, 1, 2),
+    Level("A Handful of Loops",
+          "Several anchors coexist. Learn to tell one loop from another.",
+          20, 5, 2, 3),
+    Level("Anatomy of a TAD",
+          "Loops carve out a topological domain. Watch the square bloom on the diagonal.",
+          35, 10, 2, 5),
+    Level("Loops Meet Compartments",
+          "A and B territories emerge beneath the loops. Two signals, one polymer.",
+          50, 25, 6, 10),
+    Level("A Locus in Miniature",
+          "One hundred beads, dozens of loops, a full compartment landscape. "
+          "Small by nature's standards -- still a puzzle worthy of a genome.",
+          100, 40, 8, 20),
 ]
 
 class Target:
