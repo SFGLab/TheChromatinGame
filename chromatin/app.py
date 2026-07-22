@@ -14,7 +14,7 @@ from . import analysis as an
 from . import theme, widgets
 from .audio import Music
 from .levels import LEVELS, build_target
-from .physics import A_TYPE, B_TYPE, MIN_LOOP_SPAN, Polymer, SimParams
+from .physics import A_TYPE, B_TYPE, MIN_LOOP_SPAN, Polymer, SimParams, SimulationUnstable
 from .render3d import PolymerView
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -61,8 +61,8 @@ LAB_PARAM_GROUPS = [
         ("k_grab",   "hand stiffness",       10,  200,  5,   "{:.0f}", False),
     ]),
     ("Excluded volume", [
-        ("ev_eps",   "EV height  ε",         5,   150,  5,   "{:.0f}", False),
-        ("ev_rc",    "EV diameter  rc",      0.6,  2.0, 0.05, "{:.2f}", False),
+        ("ev_eps",   "EV height  ε",         5,   500,  5,   "{:.0f}", False),
+        ("ev_rc",    "EV diameter  rc",      0.5,  4.0, 0.05, "{:.2f}", False),
     ]),
     ("Compartments (copolymer)", [
         ("sigma",      "attraction range σ",   0.5,  2.5, 0.1, "{:.2f}", False),
@@ -196,6 +196,13 @@ class LabSession:
         self.e1_live = None
         self.scale: widgets.Scale | None = None
         self._frame = 0
+
+        # Instability tracking. `unstable` gates further stepping once the
+        # integrator has diverged; `unstable_reason` carries a short,
+        # human-readable diagnosis for the menu-screen message.
+        self.unstable = False
+        self.unstable_reason = ""
+
         self._refresh(rebuild_scale=True)
 
     def _refresh(self, rebuild_scale: bool = False) -> None:
@@ -207,14 +214,42 @@ class LabSession:
         if rebuild_scale or (self._frame % 6 == 0):
             self.scale = widgets.Scale(self.P_live, C)
 
+    def _diagnose_instability(self) -> str:
+        """Best-effort guess at *why* it diverged, so the menu message is
+        actually actionable rather than just 'something broke'."""
+        p = self.params
+        ratio = p.dt * p.k_bond / max(1e-9, p.gamma)
+        if ratio > 0.5:
+            return (f"bond stiffness too high for dt/friction "
+                    f"(dt·k_bond/γ = {ratio:.2f}, keep it under ~0.5) -- "
+                    f"lower k_bond, raise γ, or lower dt")
+        if p.gamma < 0.3:
+            return f"friction γ = {p.gamma:.2f} is too low for a stable integrator"
+        if p.k_angle > 60:
+            return f"bending stiffness k_angle = {p.k_angle:.1f} is extreme"
+        if p.ev_eps > 120 and p.ev_rc > 1.6:
+            return "excluded volume is both very tall and very wide -- beads got squeezed out"
+        return "positions diverged (NaN/Inf) -- try reverting your last parameter change"
+
     def step(self) -> None:
-        if self.paused:
+        if self.paused or self.unstable:
             return
-        self.poly.step(self.poly.p.steps_per_frame)
-        c = self.poly.contacts()
-        self.P_live = 0.985 * self.P_live + 0.015 * c
-        self._frame += 1
-        self._refresh()
+        try:
+            self.poly.step(self.poly.p.steps_per_frame)
+            if not np.all(np.isfinite(self.poly.pos)):
+                raise SimulationUnstable("positions diverged (NaN/Inf)")
+            c = self.poly.contacts()
+            if not np.all(np.isfinite(c)):
+                raise SimulationUnstable("contact map diverged (NaN/Inf)")
+            self.P_live = 0.985 * self.P_live + 0.015 * c
+            self._frame += 1
+            self._refresh()
+        except SimulationUnstable as e:
+            self.unstable = True
+            self.unstable_reason = f"{e}  --  {self._diagnose_instability()}"
+        except Exception as e:
+            self.unstable = True
+            self.unstable_reason = f"unexpected error: {e}"
 
     def apply_param(self, key: str, value) -> None:
         import dataclasses
@@ -281,6 +316,11 @@ class LabSession:
         self.poly = Polymer(new_n, self.params, seed=self.seed)
         self.poly.load_config(types, loops)
         self.P_live = self.poly.contacts()
+        # A fresh Polymer is unlikely to inherit instability, but resetting
+        # here means changing bead count is also how a user can "escape" a
+        # bad parameter state without leaving the Lab entirely.
+        self.unstable = False
+        self.unstable_reason = ""
         self._refresh(rebuild_scale=True)
 
 class Game:
@@ -891,7 +931,15 @@ class Game:
 
         if self.state == LAB:
             if not self.show_help:
-                self.lab.step()
+                try:
+                    self.lab.step()
+                except Exception as e:
+                    self.lab.unstable = True
+                    self.lab.unstable_reason = f"unexpected error: {e}"
+                if self.lab.unstable:
+                    self.say(f"simulation unstable: {self.lab.unstable_reason}")
+                    self.state = MENU
+                    self.lab = None
             return
 
         if self.state != PLAY:
@@ -1472,7 +1520,8 @@ class Game:
 
         # ---- 3D view
         widgets.panel(sc, R["view"], fill=theme.INK_2)
-        self.lab_view.draw(sc, R["view"], lab.poly.pos, lab.poly.types, lab.poly.loops,
+        pos_safe = np.nan_to_num(lab.poly.pos, nan=0.0, posinf=lab.poly.box, neginf=-lab.poly.box)
+        self.lab_view.draw(sc, R["view"], pos_safe, lab.poly.types, lab.poly.loops,
                         lab.poly.box, t=time.time() - self.t0, mouse=self.mouse)
 
         # ---- two heatmaps, pinned modes: reds (contact) + coolwarm (correlation)

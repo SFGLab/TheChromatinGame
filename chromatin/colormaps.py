@@ -42,18 +42,41 @@ def _build(anchors) -> np.ndarray:
 COOLWARM = _build(_COOLWARM_ANCHORS)
 FALL = _build(_FALL_ANCHORS)
 
+# A colour reserved for genuinely broken data (NaN/Inf) so it's visually
+# obvious something diverged, rather than silently rendering as index 0 or
+# crashing the lookup outright. Loud magenta -- nothing in either ramp looks
+# like this, so it can't be mistaken for a real value.
+NAN_COLOR = np.array([255, 0, 200], dtype=np.uint8)
+
 
 def apply(values: np.ndarray, lut: np.ndarray, vmin: float, vmax: float) -> np.ndarray:
-    """Map a float array to an (H, W, 3) uint8 RGB image through `lut`."""
+    """Map a float array to an (H, W, 3) uint8 RGB image through `lut`.
+
+    Any NaN or Inf in `values` (e.g. from a diverged simulation) is rendered
+    as NAN_COLOR instead of being cast to an out-of-range integer index --
+    casting NaN to a signed int is undefined in NumPy and was previously
+    producing indices like -9223372036854775808, which crashed the lookup.
+    """
+    values = np.asarray(values, dtype=float)
+    bad = ~np.isfinite(values)
+
     if vmax - vmin < 1e-12:
         idx = np.zeros(values.shape, dtype=np.intp)
     else:
         norm = (values - vmin) / (vmax - vmin)
+        norm = np.where(bad, 0.0, norm)          # never let NaN reach the cast
         idx = np.clip(norm * 255.0, 0, 255).astype(np.intp)
-    return lut[idx]
+
+    img = lut[idx]
+    if bad.any():
+        img = img.copy()          # lut[idx] may return a view; don't mutate the LUT
+        img[bad] = NAN_COLOR
+    return img
 
 
 def sample(lut: np.ndarray, t: float) -> tuple[int, int, int]:
     """Single colour lookup, t in 0..1."""
+    if not np.isfinite(t):
+        return tuple(int(v) for v in NAN_COLOR)
     i = int(np.clip(t, 0.0, 1.0) * 255)
     return tuple(int(v) for v in lut[i])

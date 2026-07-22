@@ -36,6 +36,11 @@ B_TYPE = -1   # blue -- negative E1 -- strong self-attraction (heterochromatin)
 MIN_LOOP_SPAN = 3       # |i - j| must be at least this: no loop onto a neighbour
 N_MIN, N_MAX = 10, 400  # small polymers only, chosen for interactive feel
 
+class SimulationUnstable(RuntimeError):
+    """Raised when the integrator has diverged (NaN/Inf positions), typically
+    from a parameter combination that violates dt*k/gamma stability, e.g. an
+    overly stiff bond with too little friction or too large a timestep."""
+    pass
 
 @dataclass(frozen=True)
 class SimParams:
@@ -208,7 +213,8 @@ class Polymer:
         r2 = np.einsum("ijk,ijk->ij", d, d)
         np.fill_diagonal(r2, 1.0)
         r = np.sqrt(r2)
-        u = d / r[:, :, None]
+        r_safe = np.where(r < 1e-6, 1e-6, r)
+        u = d / r_safe[:, :, None]
 
         # 4 -- soft excluded volume (finite at contact => chains may cross)
         close = (r < p.ev_rc) & self._ev_mask & ~self._eye
@@ -234,13 +240,16 @@ class Polymer:
     # ----------------------------------------------------------- integrator
     def step(self, n_steps: int = 1) -> None:
         p = self.p
-        mob = p.dt / p.gamma                     # mobility * dt
+        mob = p.dt / p.gamma
         amp = np.sqrt(2.0 * p.kT * p.dt / p.gamma)
         pos = self.pos
         for _ in range(int(n_steps)):
             f = self.forces(pos)
             pos = pos + f * mob + amp * self.rng.normal(size=pos.shape)
             np.clip(pos, -self.box * 1.12, self.box * 1.12, out=pos)
+            if not np.all(np.isfinite(pos)):
+                raise SimulationUnstable(
+                    "positions diverged -- check dt, k_bond, gamma and force strengths")
         self.pos = pos
 
     # -------------------------------------------------------------- readout
