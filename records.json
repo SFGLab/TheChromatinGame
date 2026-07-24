@@ -36,8 +36,8 @@
     "seed": 7686
   },
   "First Contact": {
-    "best": 73.02,
-    "seed": 6098
+    "best": 74.67,
+    "seed": 8112
   },
   "First Contact  [hard]": {
     "best": 71.88,
@@ -50,5 +50,13 @@
   "A Handful of Loops  [hard]": {
     "best": 67.86,
     "seed": 543
+  },
+  "Anatomy of a TAD  [hard]": {
+    "best": 47.64,
+    "seed": 1157
+  },
+  "A Handful of Loops": {
+    "best": 43.51,
+    "seed": 8563
   }
 }
