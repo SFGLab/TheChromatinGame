@@ -6,6 +6,7 @@ from . import analysis as an
 from .physics import A_TYPE, B_TYPE, MIN_LOOP_SPAN, Polymer, SimParams, SimulationUnstable
 from . import widgets
 from .constants import *
+from .analysis_panel import AnalysisPanel
 
 class Session:
     """One playthrough of one level."""
@@ -18,6 +19,8 @@ class Session:
         self.rounds = rounds
         self.turn_seconds = turn_seconds
         self.hard = hard
+        self.analysis_panel = AnalysisPanel()
+        self.show_analysis = False
 
         self.target = None
         self.poly: Polymer | None = None
@@ -76,6 +79,8 @@ class LabSession:
         self.seed = seed
         self.params = SimParams()
         self.poly = Polymer(n, self.params, seed=seed)
+        self.analysis_panel = AnalysisPanel()
+        self.show_analysis = False
 
         rng = np.random.default_rng(seed)
         t = np.empty(n, dtype=np.int8)

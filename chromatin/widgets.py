@@ -390,38 +390,61 @@ ROWS = [
     ("loop_f1", "Loop F1", "anchors within +/-1 bin", 0.0, 1.0),
 ]
 
-
 def metric_table(surf, rect, rep, *, live=False):
     eyebrow(surf, "simulated  vs  experimental", rect.x, rect.y)
     if live:
         label(surf, "updating", rect.right, rect.y - 1, size=9, col=theme.AMBER,
               mono=True, right=True)
-    y = rect.y + 18
-    row_h = 21
+
+    y     = rect.y + 18
+    row_h = 24                          # was 21 -- extra 3 px between rows
+
+    # Column x-positions:  name | description | bar | value
+    # Pushing the description further right and the bar+value further right
+    # gives each column breathing room instead of running into the next.
+    x_name = rect.x + 2
+    x_desc = rect.x + 78               # was 66
+    x_bar  = rect.right - 162          # was rect.right - 148  (bar is 86 wide)
+    x_val  = rect.right - 2
+
     for key, name, desc, lo, hi in ROWS:
         v = float(rep.get(key, 0.0)) if rep else 0.0
-        q = (v - lo) / (hi - lo) if hi > lo else 0.0
-        q = max(0.0, min(1.0, q))
+        q = max(0.0, min(1.0, (v - lo) / (hi - lo) if hi > lo else 0.0))
         col = theme.score_color(q)
-        label(surf, name, rect.x + 2, y + 3, size=11, col=theme.TEXT, mono=True)
-        label(surf, desc, rect.x + 66, y + 4, size=10, col=theme.TEXT_FAINT)
-        bar = pygame.Rect(rect.right - 148, y + 6, 86, 7)
+
+        # Metric abbreviation (left column)
+        label(surf, name, x_name, y + 3, size=11, col=theme.TEXT, mono=True)
+
+        # Description (middle column)
+        label(surf, desc, x_desc, y + 4, size=10, col=theme.TEXT_FAINT)
+
+        # Progress bar (right-centre column)
+        bar = pygame.Rect(x_bar, y + 6, 86, 7)
         pygame.draw.rect(surf, theme.INK, bar, border_radius=3)
         if lo < 0:
-            mid = bar.x + bar.w / 2
-            pygame.draw.line(surf, theme.RULE, (mid, bar.y - 2), (mid, bar.bottom + 2), 1)
-            wdt = abs(v) / hi * (bar.w / 2)
-            x0 = mid if v >= 0 else mid - wdt
-            pygame.draw.rect(surf, col, (x0, bar.y, max(1, wdt), bar.h), border_radius=3)
-        else:
-            pygame.draw.rect(surf, col, (bar.x, bar.y, max(1, q * bar.w), bar.h),
+            # Diverging metric: bar grows from the centre
+            mid = bar.x + bar.w // 2
+            pygame.draw.line(surf, theme.RULE,
+                             (mid, bar.y - 2), (mid, bar.bottom + 2), 1)
+            wdt = abs(v) / max(hi, 1e-9) * (bar.w / 2)
+            x0  = mid if v >= 0 else mid - wdt
+            pygame.draw.rect(surf, col, (x0, bar.y, max(1, wdt), bar.h),
                              border_radius=3)
-        label(surf, f"{v:+.3f}" if lo < 0 else f"{v:.3f}", rect.right - 2, y + 3,
-              size=11, col=col, mono=True, right=True)
-        y += row_h
-        pygame.draw.line(surf, theme.RULE_SOFT, (rect.x, y - 3), (rect.right, y - 3), 1)
-    return y
+        else:
+            pygame.draw.rect(surf, col,
+                             (bar.x, bar.y, max(1, q * bar.w), bar.h),
+                             border_radius=3)
 
+        # Numeric value (right column)
+        label(surf, f"{v:+.3f}" if lo < 0 else f"{v:.3f}",
+              x_val, y + 3, size=11, col=col, mono=True, right=True)
+
+        y += row_h
+        # Row separator -- a little softer than the original
+        pygame.draw.line(surf, theme.RULE_SOFT,
+                         (rect.x, y - 4), (rect.right, y - 4), 1)
+
+    return y
 
 def big_score(surf, rect, value, caption, accent=theme.CYAN):
     panel(surf, rect, fill=theme.INK_2, border=theme.RULE)

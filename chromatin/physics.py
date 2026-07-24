@@ -44,7 +44,7 @@ class SimulationUnstable(RuntimeError):
 
 @dataclass(frozen=True)
 class SimParams:
-    dt: float = 0.005
+    dt: float = 0.001
     b0: float = 1.0
     kT: float = 0.5
     gamma: float = 5.0          # friction: higher = calmer, and proportionally slower

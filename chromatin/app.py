@@ -133,6 +133,7 @@ class Game:
         self.paint: int | None = None
         self.buttons: dict[str, widgets.Button] = {}
 
+    
     # ============================================================== buttons
     def on_button(self, b: widgets.Button):
         n = b.text
@@ -166,14 +167,16 @@ class Game:
             elif n in [l.name for l in LEVELS]:
                 self.sel_level = [l.name for l in LEVELS].index(n)
                 self.sel_seed = int(np.random.default_rng().integers(1, 9999))
+
         elif self.state == PLAY:
+            s = self.session
             if n == "Loops":
                 self.set_mode("loop")
             elif n == "Compartments":
                 self.set_mode("comp")
             elif n == "View":
-                i = widgets.MODES.index(self.session.map_mode)
-                self.session.map_mode = widgets.MODES[(i + 1) % len(widgets.MODES)]
+                i = widgets.MODES.index(s.map_mode)
+                s.map_mode = widgets.MODES[(i + 1) % len(widgets.MODES)]
             elif n in ("Measure", "End turn"):
                 self.begin_measure()
             elif n == "Menu":
@@ -181,10 +184,16 @@ class Game:
                 self.session = None
             elif n == "?":
                 self.show_help = True
+            elif n == "Analysis":
+                s.show_analysis = not s.show_analysis
+                # if s.show_analysis:
+                #     s.analysis_panel.reset()
+
         elif self.state == RESULTS:
             if n == "Back to menu":
                 self.state = MENU
                 self.session = None
+
         elif self.state == SETTINGS:
             if n == "Back":
                 save_settings(self.settings)
@@ -205,13 +214,14 @@ class Game:
                 self.settings["fullscreen"] = True
                 self.apply_display_settings()
             else:
-                # resolution buttons — text is "WIDTHxHEIGHT"
+                # Resolution buttons — button text is "WIDTHxHEIGHT"
                 for i, (rw, rh) in enumerate(RESOLUTIONS):
                     if n == f"{rw}x{rh}":
                         self.settings["resolution"] = i
                         self.settings["fullscreen"] = False
                         self.apply_display_settings()
                         break
+
         elif self.state == LAB:
             lab = self.lab
             if n == "Exit Lab":
@@ -223,7 +233,7 @@ class Game:
                 lab.randomize_all()
             elif n == "Reset":
                 self.lab = LabSession(n=lab.poly.n,
-                                    seed=int(np.random.default_rng().integers(1, 9999)))
+                                      seed=int(np.random.default_rng().integers(1, 9999)))
             elif n == "+1 bead":
                 lab.set_bead_count(lab.poly.n + 1)
             elif n == "-1 bead":
@@ -232,6 +242,10 @@ class Game:
                 lab.set_bead_count(lab.poly.n + 10)
             elif n == "-10":
                 lab.set_bead_count(lab.poly.n - 10)
+            elif n == "Analysis":
+                lab.show_analysis = not lab.show_analysis
+                # if lab.show_analysis:
+                #     lab.analysis_panel.reset()
 
     def apply_display_settings(self) -> None:
         """(Re)create the window with the current settings and apply font scale."""
@@ -268,21 +282,45 @@ class Game:
         for ev in pygame.event.get():
             self.music.handle(ev)
             if ev.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
-                           pygame.MOUSEBUTTONUP):
+                        pygame.MOUSEBUTTONUP):
                 self.mouse = ev.pos
             if ev.type == pygame.QUIT:
                 self.running = False
+                continue
+
             elif ev.type == pygame.VIDEORESIZE:
                 w = max(theme.MIN_W, ev.w)
                 h = max(theme.MIN_H, ev.h)
-                self.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE | pygame.DOUBLEBUF)
+                self.screen = pygame.display.set_mode(
+                    (w, h), pygame.RESIZABLE | pygame.DOUBLEBUF)
+
             elif ev.type == pygame.KEYDOWN:
                 self.on_key(ev)
+
+            # ---- Analysis panel Clear button (checked before anything else
+            # so a click on the panel doesn't also fire game buttons beneath it)
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                if (self.state == PLAY
+                        and self.session is not None
+                        and self.session.show_analysis):
+                    if self.session.analysis_panel.handle_click(ev.pos):
+                        continue   # consumed by the panel -- skip everything below
+                if (self.state == LAB
+                        and self.lab is not None
+                        and self.lab.show_analysis):
+                    if self.lab.analysis_panel.handle_click(ev.pos):
+                        continue   # consumed by the panel -- skip everything below
+
+            # ---- Game buttons (header, footer, menu rows, etc.)
             for b in self.buttons.values():
                 if b.handle(ev):
                     self.on_button(b)
+
+            # ---- Play-screen mouse (heatmap clicks, ribbon, 3D orbit/drag)
             if self.state == PLAY and not self.show_help:
                 self.on_play_mouse(ev)
+
+            # ---- Lab-screen controls (sliders, bead field, 3D + heatmap mouse)
             if self.state == LAB and self.lab is not None:
                 for sl in self.lab_sliders.values():
                     if sl.handle(ev):
@@ -295,10 +333,18 @@ class Game:
 
     def on_key(self, ev):
         k = ev.key
-        # global
+
+        # ----------------------------------------------------------------
+        # ESC: close panels in priority order before changing state
+        # ----------------------------------------------------------------
         if k == pygame.K_ESCAPE:
             if self.show_help:
                 self.show_help = False
+            elif self.state == PLAY and self.session and self.session.show_analysis:
+                # Close the analysis panel first; a second ESC exits to menu
+                self.session.show_analysis = False
+            elif self.state == LAB and self.lab and self.lab.show_analysis:
+                self.lab.show_analysis = False
             elif self.state == SETTINGS:
                 save_settings(self.settings)
                 self.state = MENU
@@ -311,6 +357,10 @@ class Game:
             else:
                 self.running = False
             return
+
+        # ----------------------------------------------------------------
+        # Global keys (work in any state)
+        # ----------------------------------------------------------------
         if k in (pygame.K_h, pygame.K_F1):
             self.show_help = not self.show_help
             return
@@ -331,6 +381,9 @@ class Game:
             self.say(f"volume {int(self.music.volume * 100)}%")
             return
 
+        # ----------------------------------------------------------------
+        # State-specific keys
+        # ----------------------------------------------------------------
         if self.state == MENU:
             if k == pygame.K_RETURN:
                 self.start_session()
@@ -345,19 +398,36 @@ class Game:
                 self.state = MENU
                 self.session = None
             return
-        
+
         if self.state == LAB:
             lab = self.lab
+            # Let the bead-count text field own all keystrokes while focused
             if self.lab_bead_field is not None and self.lab_bead_field.focused:
-                return          # let the text field own all keys while typing
+                return
             if k == pygame.K_SPACE:
                 lab.paused = not lab.paused
+            elif k == pygame.K_a:
+                # A toggles the analysis panel (mirrors the header button)
+                lab.show_analysis = not lab.show_analysis
+                if lab.show_analysis:
+                    lab.analysis_panel.reset()
             return
 
         if self.state != PLAY:
             return
 
+        # ----------------------------------------------------------------
+        # PLAY keys
+        # ----------------------------------------------------------------
         s = self.session
+
+        if k == pygame.K_a:
+            # A toggles the analysis panel (mirrors the header button)
+            s.show_analysis = not s.show_analysis
+            if s.show_analysis:
+                s.analysis_panel.reset()
+            return
+
         if k == pygame.K_l:
             self.set_mode("loop")
         elif k == pygame.K_c:
@@ -521,6 +591,11 @@ class Game:
                     self.say(f"simulation unstable: {self.lab.unstable_reason}")
                     self.state = MENU
                     self.lab = None
+                    return
+                # Always collect metrics so the history builds up from the
+                # moment the Lab starts, not just while the panel is open.
+                if self.lab is not None:
+                    self.lab.analysis_panel.update(self.lab.poly)
             return
 
         if self.state != PLAY:
@@ -537,6 +612,9 @@ class Game:
                 s.P_live += LIVE_ALPHA * c
             if f % 20 == 0:
                 s.refresh_live()
+            # Always collect metrics so opening the panel reveals the full
+            # history since the simulation started, not just since it opened.
+            s.analysis_panel.update(s.poly)
 
         tl = s.time_left()
         if s.two_player and tl is not None and tl <= 0.0:

@@ -366,14 +366,14 @@ def draw_play(self, W, H):
     self.view.mark = (hb if hb and hb[0] != hb[1] else
                       ((rb,) if rb is not None else ()))
 
-    # 3D viewport
+    # ---- 3D viewport
     widgets.panel(sc, R["view"], fill=theme.INK_2)
     self.view.draw(sc, R["view"], s.poly.pos, s.poly.types, s.poly.loops,
                    s.poly.box, e1=None, t=time.time() - self.t0,
                    mouse=self.mouse)
     self.draw_view_hud(R["view"])
 
-    # Heatmaps: in hard mode the target loses its loop-anchor overlay.
+    # ---- Heatmaps: in hard mode the target loses its loop-anchor overlay.
     if self._scale is None:
         self._scale = widgets.Scale(t.P, t.C)
     self.hm_tgt.draw(sc, t.P, t.C, s.map_mode,
@@ -389,7 +389,7 @@ def draw_play(self, W, H):
                      live=(self.state == PLAY and not s.paused),
                      mouse=self.mouse, scale=self._scale)
 
-    # E1 tracks (target track hidden in hard mode -- it encodes the answer).
+    # ---- E1 tracks (target track hidden in hard mode -- it encodes the answer)
     g1, g2 = self.hm_tgt.grid, self.hm_sim.grid
     y = R["tgt"].bottom + 14
     if s.hard:
@@ -404,7 +404,7 @@ def draw_play(self, W, H):
     widgets.eigen_track(sc, pygame.Rect(g2.x, y, g2.w, 34),
                         s.e1_live, title="E1 yours")
 
-    # Colour ribbon (always visible -- it shows the player's own colouring).
+    # ---- Colour ribbon (always visible -- shows the player's own colouring)
     yr     = y + 42
     ribbon = pygame.Rect(g2.x, yr, g2.w, 14)
     self.rects["ribbon"] = ribbon
@@ -421,12 +421,12 @@ def draw_play(self, W, H):
                   g2.x + g2.w, yr - 16, size=9, col=theme.CYAN,
                   mono=True, right=True)
 
-    # Metric table
+    # ---- Metric table
     mt = pygame.Rect(R["right"].x, yr + 34, R["right"].w, 180)
     widgets.metric_table(sc, mt, s.rep_live,
                          live=(self.state == PLAY and not s.paused))
 
-    # Score display (different layout for solo vs versus)
+    # ---- Score display (different layout for solo vs versus)
     ys = mt.y + 190
     if s.two_player:
         hw = (R["right"].w - theme.PAD) // 2
@@ -454,6 +454,9 @@ def draw_play(self, W, H):
                       pygame.Rect(R["right"].x, ys + 92, R["right"].w, 30),
                       self._scale, s.map_mode)
 
+    # ---- Structural analysis overlay (drawn last -- sits on top of everything)
+    if s.show_analysis:
+        s.analysis_panel.draw(sc, W, H)
 
 def draw_header(self, W):
     """Play-screen header: title, mode buttons, turn banner, measure button."""
@@ -477,21 +480,29 @@ def draw_header(self, W):
                   size=11, col=theme.POOR if s.hard else theme.TEXT_FAINT)
 
     # Mode toggles (enabled/disabled depending on whose turn it is in versus)
-    x       = int(220 * S)
-    w_loops = int(108 * S)
-    w_comp  = int(150 * S)
-    w_view  = int(80 * S)
+    x         = int(220 * S)
+    w_loops   = int(108 * S)
+    w_comp    = int(150 * S)
+    w_view    = int(80 * S)
+    w_analysis= int(100 * S)
+
     bl = widgets.Button((x, btn_y, w_loops, btn_h),
                         "Loops", key="L", accent=theme.GREEN)
     bc = widgets.Button((x + w_loops + gap, btn_y, w_comp, btn_h),
                         "Compartments", key="C", accent=theme.CYAN)
     bv = widgets.Button((x + w_loops + gap + w_comp + gap, btn_y, w_view, btn_h),
                         "View", key="V")
+    ba = widgets.Button((x + w_loops + gap + w_comp + gap + w_view + gap,
+                         btn_y, w_analysis, btn_h),
+                        "Analysis", accent=theme.AMBER)   # amber: distinct from both GREEN and CYAN
+
     bl.active  = s.mode == "loop"
     bc.active  = s.mode == "comp"
     bl.enabled = s.allowed("loop")
     bc.enabled = s.allowed("comp")
-    for k, b in (("loops", bl), ("comp", bc), ("view", bv)):
+    ba.active  = s.show_analysis   # lit up while the panel is open
+
+    for k, b in (("loops", bl), ("comp", bc), ("view", bv), ("analysis", ba)):
         self.buttons[k] = b
         b.draw(sc)
 
@@ -767,7 +778,7 @@ def draw_lab(self, W, H):
     self.compute_lab_layout(W, H)
     R = self.rects
 
-    # Header -- minimal controls, no mode toggles (loops+compartments always active)
+    # ---- Header
     r = R["header"]
     pygame.draw.rect(sc, theme.INK, r)
     pygame.draw.line(sc, theme.RULE, (0, r.bottom - 1), (W, r.bottom - 1), 1)
@@ -775,35 +786,44 @@ def draw_lab(self, W, H):
                   col=theme.ROYAL_RED, bold=True)
     widgets.label(sc, "free-play sandbox — every parameter is live", 16, 27,
                   size=11, col=theme.TEXT_FAINT)
+
+    # Buttons laid out left-to-right, then Exit Lab pinned to the right edge.
+    # Analysis is amber (consistent with the PLAY header) and lights up while
+    # the panel is open.
     bp  = widgets.Button((260, 12, 100, 32),
                          "Pause" if not lab.paused else "Resume", key="SPACE")
-    bp.active = lab.paused
     br  = widgets.Button((368, 12, 100, 32), "Randomize")
     brs = widgets.Button((476, 12,  90, 32), "Reset")
+    ba  = widgets.Button((574, 12, 100, 32), "Analysis", accent=theme.AMBER)
     bx  = widgets.Button((W - 120, 12, 104, 32), "Exit Lab", key="ESC")
+
+    bp.active = lab.paused
+    ba.active = lab.show_analysis   # lit while the panel is open
+
     for k, b in (("lab_pause", bp), ("lab_rand", br),
-                 ("lab_reset", brs), ("lab_exit", bx)):
+                 ("lab_reset", brs), ("lab_analysis", ba), ("lab_exit", bx)):
         self.buttons[k] = b
         b.draw(sc)
 
-    # Footer
+    # ---- Footer
     fr = R["footer"]
     pygame.draw.rect(sc, theme.INK, fr)
     pygame.draw.line(sc, theme.RULE, (0, fr.y), (W, fr.y), 1)
     widgets.label(sc,
                   "click any cell on a map to tie/untie a loop  ·  "
                   "paint the ribbon to set compartments  ·  "
-                  "shift+click a bead in 3D to flip it",
+                  "shift+click a bead in 3D to flip it  ·  "
+                  "A  structural analysis",
                   16, fr.y + 9, size=11, col=theme.TEXT_DIM)
 
-    # 3D viewport -- positions sanitised in case of a diverged integrator
+    # ---- 3D viewport (positions sanitised against a diverged integrator)
     widgets.panel(sc, R["view"], fill=theme.INK_2)
     pos_safe = np.nan_to_num(lab.poly.pos,
                              nan=0.0, posinf=lab.poly.box, neginf=-lab.poly.box)
     self.lab_view.draw(sc, R["view"], pos_safe, lab.poly.types, lab.poly.loops,
                        lab.poly.box, t=time.time() - self.t0, mouse=self.mouse)
 
-    # Two heatmaps: contact frequency (Reds) + O/E correlation (coolwarm)
+    # ---- Two heatmaps: contact frequency (Reds) + O/E correlation (coolwarm)
     self.hm_lab_a.layout(R["map_a"], lab.poly.n)
     self.hm_lab_b.layout(R["map_b"], lab.poly.n)
     self.hm_lab_a.draw(sc, lab.P_live, lab.C_live, "contact",
@@ -817,15 +837,18 @@ def draw_lab(self, W, H):
                        accent=theme.CYAN, live=not lab.paused,
                        mouse=self.mouse, scale=lab.scale)
 
-    # Colour ribbon spans the full left column width
+    # ---- Colour ribbon spanning the full left column width
     ry     = R["map_a"].bottom + int(10 * getattr(theme, "FONT_SCALE", 1.0))
     ribbon = pygame.Rect(R["view"].x, ry, R["view"].w, 14)
     self.rects["ribbon"] = ribbon
     widgets.type_track(sc, ribbon, lab.poly.types, hover=self.lab_view.hover)
 
-    # Scrollable parameter panel on the right
+    # ---- Scrollable parameter panel on the right
     self.draw_lab_panel(R["panel"])
 
+    # ---- Structural analysis overlay (drawn last so it sits on top of everything)
+    if lab.show_analysis:
+        lab.analysis_panel.draw(sc, W, H)
 
 def draw_lab_panel(self, panel_rect):
     """Scrollable parameter panel for the MiNI-Lab.
