@@ -52,6 +52,10 @@ def draw(self):
         self.draw_help(W, H)
     self.draw_toast(W, H)
 
+    # Manual overlay drawn last so it sits on top of everything including
+    # the help panel and toast. show_manual is set in on_button / on_key.
+    if self.show_manual:
+        self.manual.draw(self.screen, W, H)
 
 def compute_layout(self, W, H):
     """Compute rects for the PLAY screen: header/footer/viewport/heatmaps.
@@ -168,7 +172,6 @@ def draw_menu(self, W, H):
         widgets.label(sc, f"{lvl.n} beads · {lvl.n_loops} {plural}",
                       r.right + 12, r.y + 7, size=11,
                       col=theme.TEXT_FAINT, mono=True)
-        # Show best score for the current difficulty.
         rec_key = lvl.name + ("  [hard]" if self.sel_hard else "")
         rec = self.records.get(rec_key, {}).get("best")
         if rec:
@@ -187,7 +190,6 @@ def draw_menu(self, W, H):
     self.buttons["versus"] = b2
     b1.draw(sc); b2.draw(sc)
 
-    # Difficulty buttons sit on the same row, right of the mode buttons.
     bd1 = widgets.Button((x + 480, y3 + 18, 90, 30), "Easy")
     bd2 = widgets.Button((x + 574, y3 + 18, 90, 30), "Hard", accent=theme.POOR)
     bd1.active = not self.sel_hard
@@ -210,29 +212,34 @@ def draw_menu(self, W, H):
                       x, y3 + 56, size=11, col=theme.TEXT_FAINT)
 
     # ---- Action row: Start / Shuffle / How to play / Settings / Quit
-    y4   = y3 + 86
-    bs   = widgets.Button((x,       y4, 150, 38), "Start",      key="ENTER", size=15)
-    bsh  = widgets.Button((x + 158, y4, 130, 38), "Shuffle seed",             size=13)
-    bh   = widgets.Button((x + 296, y4, 130, 38), "How to play", key="H",    size=13)
-    bset = widgets.Button((x + 434, y4, 110, 38), "Settings",                 size=13)
-    bq   = widgets.Button((x + 552, y4,  80, 38), "Quit",                     size=13)
+    y4  = y3 + 86
+    bs  = widgets.Button((x,       y4, 110, 38), "Start",       key="ENTER", size=14)
+    bsh = widgets.Button((x + 118, y4, 120, 38), "Shuffle seed",              size=13)
+    bh  = widgets.Button((x + 246, y4, 120, 38), "How to play", key="H",     size=13)
+    bset= widgets.Button((x + 374, y4, 100, 38), "Settings",                  size=13)
+    bq  = widgets.Button((x + 482, y4,  70, 38), "Quit",                      size=13)
     bs.active = True
     for k, b in (("start", bs), ("seed", bsh), ("help", bh),
                  ("settings", bset), ("quit", bq)):
         self.buttons[k] = b
         b.draw(sc)
-    widgets.label(sc, f"seed {self.sel_seed}", x + 640, y4 + 12,
+    widgets.label(sc, f"seed {self.sel_seed}", x + 560, y4 + 12,
                   size=11, col=theme.TEXT_FAINT, mono=True)
 
-    # ---- Chromatin MiNI-Lab shortcut
-    y5   = y4 + 56
-    blab = widgets.Button((x, y5, 260, 42), "Chromatin MiNI-Lab",
-                          size=15, accent=theme.ROYAL_RED)
+    # ---- Second row: MiNI-Lab (left) + Manual (right), same baseline
+    y5   = y4 + 52
+    blab = widgets.Button((x, y5, 220, 40), "Chromatin MiNI-Lab",
+                          size=14, accent=theme.ROYAL_RED)
+    bman = widgets.Button((x + 230, y5, 110, 40), "Manual",
+                          size=13, accent=(28, 110, 65))
     blab.active = True
-    self.buttons["lab"] = blab
-    blab.draw(sc)
+    self.buttons["lab"]    = blab
+    self.buttons["manual"] = bman
+    blab.draw(sc); bman.draw(sc)
     widgets.label(sc, "free-play sandbox — every force, every parameter, live",
-                  x + 272, y5 + 14, size=11, col=theme.TEXT_FAINT)
+                  x, y5 + 44, size=10, col=theme.TEXT_FAINT)
+    widgets.label(sc, "physics · equations · metrics",
+                  x + 230, y5 + 44, size=10, col=theme.TEXT_FAINT)
 
     # ---- Music strip (bottom-left)
     m = self.music

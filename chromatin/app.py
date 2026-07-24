@@ -16,7 +16,8 @@ from .audio import Music
 from .levels import LEVELS, build_target
 from .physics import A_TYPE, B_TYPE, MIN_LOOP_SPAN, Polymer, SimParams, SimulationUnstable
 from .render3d import PolymerView
-from .session import Session, LabSession 
+from .session import Session, LabSession
+from .manual_panel import ManualPanel
 from .constants import *
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -82,6 +83,9 @@ class Game:
         self.view = PolymerView()
         self.hm_tgt = widgets.Heatmap("experimental  /  target")
         self.hm_sim = widgets.Heatmap("simulated  /  yours")
+
+        self.show_manual = False
+        self.manual = ManualPanel()
 
         # menu selections
         self.sel_hard = False
@@ -152,6 +156,9 @@ class Game:
                 self.running = False
             elif n == "Settings":
                 self.state = SETTINGS
+            elif n == "Manual":
+                self.show_manual = True
+                self.manual.select(0)
             elif n.startswith("Rounds"):
                 self.sel_rounds = self.sel_rounds % 5 + 1
             elif n.startswith("Turn"):
@@ -277,13 +284,39 @@ class Game:
         self.music.stop()
         pygame.quit()
 
+    def _get_close_rect(self, W: int, H: int) -> pygame.Rect:
+        mw = int(W * 0.92)
+        mh = int(H * 0.90)
+        mx = (W - mw) // 2
+        my = (H - mh) // 2
+        close_f   = theme.font(16, bold=True)
+        close_img = close_f.render("×", True, theme.TEXT_FAINT)   # match draw() exactly
+        return pygame.Rect(
+            mx + mw - close_img.get_width() - self.PAD,
+            my + self.PAD - 2,
+            close_img.get_width() + 8,
+            close_img.get_height() + 4)
+
     # =============================================================== events
     def handle_events(self):
         for ev in pygame.event.get():
+            # ---- Manual overlay consumes ALL events while open.
+            if self.show_manual:
+                if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
+                    self.show_manual = False
+                elif ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEWHEEL):
+                    W, H = self.screen.get_size()
+                    result = self.manual.handle_event(ev, W, H)
+                    if result == "close":
+                        self.show_manual = False
+                continue
+
+            # ---- Normal event routing (manual is closed) ------------------
             self.music.handle(ev)
             if ev.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
-                        pygame.MOUSEBUTTONUP):
+                           pygame.MOUSEBUTTONUP):
                 self.mouse = ev.pos
+
             if ev.type == pygame.QUIT:
                 self.running = False
                 continue
@@ -297,19 +330,19 @@ class Game:
             elif ev.type == pygame.KEYDOWN:
                 self.on_key(ev)
 
-            # ---- Analysis panel Clear button (checked before anything else
-            # so a click on the panel doesn't also fire game buttons beneath it)
+            # ---- Analysis panel Clear button (before game buttons so a
+            # click on the panel doesn't also fire buttons beneath it)
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                 if (self.state == PLAY
                         and self.session is not None
                         and self.session.show_analysis):
                     if self.session.analysis_panel.handle_click(ev.pos):
-                        continue   # consumed by the panel -- skip everything below
+                        continue
                 if (self.state == LAB
                         and self.lab is not None
                         and self.lab.show_analysis):
                     if self.lab.analysis_panel.handle_click(ev.pos):
-                        continue   # consumed by the panel -- skip everything below
+                        continue
 
             # ---- Game buttons (header, footer, menu rows, etc.)
             for b in self.buttons.values():
@@ -320,7 +353,7 @@ class Game:
             if self.state == PLAY and not self.show_help:
                 self.on_play_mouse(ev)
 
-            # ---- Lab-screen controls (sliders, bead field, 3D + heatmap mouse)
+            # ---- Lab-screen controls (sliders, bead field, 3D + heatmap)
             if self.state == LAB and self.lab is not None:
                 for sl in self.lab_sliders.values():
                     if sl.handle(ev):
@@ -331,6 +364,30 @@ class Game:
                         self.lab.set_bead_count(new_n)
                 self.on_lab_mouse(ev)
 
+    def handle_event(self, ev) -> str:
+        """Returns 'close', 'consumed', or 'outside'.
+
+        Callers should only close the manual on 'close'. Scroll and nav
+        clicks return 'consumed'. Anything else returns 'consumed' too so
+        the caller's unconditional continue fires and nothing leaks through.
+        """
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            if self._close_rect and self._close_rect.collidepoint(ev.pos):
+                return "close"
+            for i, r in enumerate(self._nav_rects):
+                if r.collidepoint(ev.pos):
+                    self.select(i)
+                    return "consumed"
+            return "consumed"
+
+        if ev.type == pygame.MOUSEWHEEL:
+            self._scroll = max(0, min(
+                self._scroll - ev.y * self.SCROLL_STEP,
+                max(0, self._content_h)))
+            return "consumed"
+
+        return "consumed"
+
     def on_key(self, ev):
         k = ev.key
 
@@ -338,7 +395,9 @@ class Game:
         # ESC: close panels in priority order before changing state
         # ----------------------------------------------------------------
         if k == pygame.K_ESCAPE:
-            if self.show_help:
+            if self.show_manual:
+                self.show_manual = False
+            elif self.show_help:
                 self.show_help = False
             elif self.state == PLAY and self.session and self.session.show_analysis:
                 # Close the analysis panel first; a second ESC exits to menu
