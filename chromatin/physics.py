@@ -58,9 +58,9 @@ class SimParams:
     ev_rc: float = 1.0         # exclusion diameter
 
     sigma: float = 2.0         # Gaussian attraction width  (>= ev_rc)
-    eps_AA: float = 2.0       # red / red   -- weak attraction
+    eps_AA: float = 1.0       # red / red   -- weak attraction
     eps_BB: float = 5.0        # blue / blue -- strong attraction
-    eps_AB: float = -1.0       # red / blue  -- slight incompatibility (Flory chi)
+    eps_AB: float = -0.5       # red / blue  -- slight incompatibility (Flory chi)
     eps_domain: float = 0.20    # extra cohesion inside a loop (extrusion-like TAD)
 
     k_wall: float = 90.0

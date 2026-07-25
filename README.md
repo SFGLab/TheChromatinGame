@@ -1,126 +1,277 @@
-# TheChromatinGame
-An experimemntal interactive python game for the chromatin folding.
+# The Chromatin Game
 
-**Build the fold. Match the map.**
+> **Build the fold. Match the map.**
 
-An educational polymer-physics game. You are handed a Hi-C contact map and must
-build the chromatin fibre that produces it — by placing **loops** and painting
-**compartments** — while a real Brownian-dynamics simulation folds your polymer
-in 3D and measures its own contact map back at you.
+An experimental, interactive Python game about one of the deepest unsolved
+problems in molecular biology: how does a two-metre strand of DNA fold itself
+into a nucleus four micrometres across — and how can we reconstruct that
+three-dimensional structure from the indirect, population-averaged measurements
+that experiments give us?
 
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
-Requires Python 3.10+, `pygame-ce` (or `pygame`) and `numpy`. Nothing else — the
-3D renderer, the colour maps and the Hi-C pipeline are all written from scratch.
-
-<img width="1118" height="374" alt="chromatin_game" src="https://github.com/user-attachments/assets/d6fa2fae-b135-491e-a962-938d560c65c3" />
+Requires Python 3.10+, `pygame-ce`, `numpy`, `scipy`, and `matplotlib`.
+The 3D renderer, the Hi-C analysis pipeline, and the colourmaps are all
+written from scratch — no OpenGL, no pandas, no scikit-learn.
 
 ---
 
-## The idea
+## Inspiration — the inverse problem
 
-Real chromosome folding is driven by two largely independent mechanisms, and
-Hi-C sees both:
+Most of physics runs forward: you know the rules, you predict what happens.
+Chromatin folding runs the other way. Hi-C experiments give you a contact
+frequency matrix — a heatmap where entry (i, j) encodes how often genomic
+loci i and j were found close together in space — and you must infer what
+three-dimensional structure produced it.
 
-| Mechanism | What it looks like in Hi-C | Your move |
-|---|---|---|
-| **Loop extrusion** (cohesin/CTCF) | a bright **corner dot** at (i,j), plus a **TAD** square along the diagonal | tie a loop |
-| **Compartmentalisation** (A/B, euchromatin/heterochromatin) | a **plaid checkerboard** far from the diagonal; sign flips in **E1** | paint a bead |
+This is an **inverse problem**, and inverse problems are hard by construction.
+A well-posed problem (Hadamard, 1902) has a solution that exists, is unique,
+and changes continuously with the data. Inverse problems fail on all three
+counts. For chromatin in particular:
 
-The game makes you feel that separation: the loop player and the compartment
-player fold *the same polymer* and are graded on *different* features of *the
-same map*.
+- Hi-C is an **ensemble average** over millions of cells, each with a slightly
+  different conformation. The same heatmap is consistent with many completely
+  different structural ensembles.
+- The measurement is **lossy**: all phase information is destroyed, and only
+  pairwise proximity is recorded, not absolute positions.
+- **Noise and systematic biases** in the sequencing mean that small changes in
+  the map can correspond to wildly different inferred structures.
+
+There is no algorithm that reliably solves this inverse problem in full
+generality. What researchers do instead — and what this game asks you to do —
+is constrain the space of solutions with a physical polymer model and ask which
+parameter choices make the simulated contact map best match the experimental
+one.
+
+The game was built because the chromatin field draws together physicists,
+biologists, mathematicians, and computer scientists, many of whom have deep
+expertise in one area and limited intuition for the others. Biologists who work
+with Hi-C data daily may never have seen a polymer simulation; polymer
+physicists may have little sense of what a contact map actually encodes
+biologically. The game is an **experimental framework for building that
+intuition interactively** — not reading about it, but doing it, watching the
+heatmap change in real time as you place loops and paint compartments.
+
+---
 
 ## The physics
 
-Overdamped Langevin dynamics (`chromatin/physics.py`), integrated in pure NumPy:
+The chromatin fibre is modelled as a chain of N beads evolving under
+**overdamped Langevin dynamics** — the correct model for a polymer in a
+viscous environment where inertia is negligible compared to friction:
 
-- **Backbone** — stiff harmonic bonds between consecutive beads (`k=100`).
-- **Loops** — a harmonic bond between two *non-consecutive* beads (`k=30`,
-  anchors ≥3 apart). Everything between the anchors compacts into a TAD.
-- **Excluded volume** — soft repulsion, so the chain is self-avoiding but
-  *crossable*, which is what makes the dynamics fast enough to play with.
-- **Compartments** — Gaussian block-copolymer attraction. Red **A** beads attract
-  A weakly (`ε=0.75`), blue **B** beads attract B strongly (`ε=1.60`), and A–B is
-  slightly repulsive (`ε=-0.15`). Blue blocks collapse into a core; that alone
-  produces the checkerboard.
-- **Box** — soft walls, scaling as `N^(1/3)` to hold density constant.
+```
+dr/dt  =  F(r) / γ  +  √(2kT/γ) · ξ(t)
+```
 
-These numbers are tuned, not guessed: with the ground-truth colouring the
-simulated **E1 correlates with the bead types at r ≈ 0.96**, and a correct loop
-gives a corner probability of ~0.93 against a ~0.2 background.
+γ is the friction coefficient, kT is thermal energy, and ξ(t) is Gaussian
+white noise whose amplitude is fixed by the fluctuation-dissipation theorem.
+Raising γ slows the dynamics without changing which structures are
+thermodynamically stable. Integration uses the Euler-Maruyama scheme with
+timestep dt; stability requires `dt · k_bond / γ < 0.5`.
 
-## The analysis
+The total potential energy is a sum of six terms:
 
-`chromatin/analysis.py` is a miniature but real Hi-C pipeline:
+### 1. Backbone bonds
+Stiff harmonic springs between consecutive beads with equilibrium length b₀
+keep the chain connected. Without other forces this gives a freely-jointed
+random walk. The stiffness k_bond is large enough that bonds stay near b₀
+at all times.
 
-`contacts → observed/expected → correlation matrix → E1 (eigenvector)`
+### 2. Bending stiffness (Kratky-Porod)
+A bending penalty on the angle φ between consecutive bond vectors gives the
+chain a persistence length and makes it look like a smooth worm rather than
+a crumpled string. Larger k_angle → stiffer, more rod-like chain.
 
-with **E1 sign-oriented by bead type**, exactly as real pipelines orient by GC
-content. Scored with **SCC** (stratum-adjusted correlation — the headline
-number), Pearson/Spearman, **E1 r**, checkerboard correlation, **APA**
-(aggregate peak analysis) and **anchor F1**.
+```
+U_bend  =  k_angle · Σᵢ (1 − cos φᵢ)
+```
 
-Your map is always an **ensemble average over simulation time**. One structure is
-never a Hi-C map — pressing `ENTER` runs a long measurement (520 conformations)
-and that is what gets scored.
+### 3. Excluded volume
+A soft-core repulsion between all non-bonded pairs (|i−j| ≥ 2) keeps beads
+apart while remaining **crossable** — chains can pass through each other.
+This matches the biology (topoisomerases resolve tangles in the cell) and
+keeps the simulation fast. The softness is controlled by ε_EV and diameter r_c.
+
+### 4. Loop bonds
+Each placed loop (m, n) adds a harmonic spring between two non-consecutive
+beads with |m−n| ≥ 3, mimicking a cohesin ring stalled at two CTCF sites.
+The spring pulls all beads between m and n into a compact domain — a **TAD**
+— visible as a bright square on the diagonal of the contact map with a corner
+dot at (m, n).
+
+### 5. Block-copolymer attraction
+A Gaussian pairwise attraction whose well depth depends on the epigenetic
+types of the two beads drives **phase separation**:
+
+```
+U_cp(i,j)  =  −ε(tᵢ, tⱼ) · exp(−|rᵢ − rⱼ|² / 2σ²)
+```
+
+- **ε_BB** (blue-blue, strong): heterochromatin collapses into a dense core
+- **ε_AA** (red-red, weak): euchromatin stays more open and accessible  
+- **ε_AB** (red-blue, negative): Flory-Huggins incompatibility sharpens the boundary
+
+This single term is responsible for the entire **plaid checkerboard** pattern
+in Hi-C — loci in the same compartment enrich each other, loci across
+the boundary are depleted.
+
+### 6. Confinement
+Soft harmonic walls confine the chain to a cube of half-side L ∝ N^(1/3),
+keeping bead density N-independent as you change chain length. Only beads
+outside the box feel a force; inside it is invisible.
+
+### Validation
+These are not free parameters chosen to make the game look good. With the
+ground-truth colouring and loop placement, the simulated E1 eigenvector
+correlates with bead types at **r ≈ 0.96**, and a correct loop gives a
+corner contact probability of **~0.93** against a **~0.2** background —
+numbers consistent with what real coarse-grained chromatin models achieve
+in the literature.
+
+---
+
+## The analysis pipeline
+
+`chromatin/analysis.py` implements a miniature but genuine Hi-C pipeline:
+
+```
+raw contacts  →  O/E normalisation  →  Pearson correlation matrix  →  E1
+```
+
+**O/E normalisation** divides each entry P(i,j) by the genome-distance-averaged
+mean, removing the distance decay and revealing compartment structure.
+
+**The correlation matrix** C(i,j) is the Pearson correlation between rows i and
+j of the O/E matrix — positive when two loci have similar contact profiles
+(same compartment), negative when they do not.
+
+**E1** is the first eigenvector of C, sign-oriented by bead type exactly as
+real pipelines orient by GC content. Positive E1 = A compartment (red);
+negative E1 = B compartment (blue).
+
+Scoring uses five metrics:
+
+| Metric | What it measures |
+|---|---|
+| **SCC** | stratum-adjusted correlation — the headline score, robust to distance decay |
+| **E1 r** | Pearson correlation of eigenvectors — directly rewards correct compartments |
+| **r_cb** | checkerboard correlation — rewards fine compartment structure |
+| **APA** | aggregate peak analysis — rewards loop enrichment at correct positions |
+| **F1** | anchor F1 — rewards precise loop placement, penalises spurious loops |
+
+Your map is always an **ensemble average over simulation time**. One structure
+is never a Hi-C map — pressing Enter runs a long measurement (520 conformations)
+and that ensemble average is what gets scored.
+
+---
+
+## Gameplay
+
+### Single player
+You control both loops and compartments, trying to maximise the total score.
+The simulation runs live in 3D; pressing Enter freezes it, measures the ensemble
+average, and reports your score.
+
+### Two-player versus
+One player controls loops, the other controls compartments — on **the same polymer**.
+They are scored independently on different features of the same contact map.
+The scores are genuinely orthogonal: correct loops with random colours scores
+LOOP 80 / COMP 7; correct colours with no loops scores LOOP 14 / COMP 81.
+
+### Hard mode
+The target's loop anchors and E1 track are hidden. You must read the structure
+from the raw contact map alone — as a real analyst would.
+
+### Chromatin MiNI-Lab
+A free-play sandbox with live sliders for every force-field parameter. Change
+γ, k_bond, ε_BB, σ, contact cutoff — anything — and watch the polymer and
+heatmaps respond in real time. Includes a live structural analysis panel
+(Rg, R_ee, asphericity, compaction index, contact count, bond length) and
+full interactive loop and compartment editing.
+
+---
 
 ## Controls
 
-| | |
+| Key / action | Effect |
 |---|---|
-| **`L` / `C`** | loops mode / compartments mode |
-| **click a map cell `(i,j)`** | tie or untie that loop — *the primary move* |
+| **L / C** | loops mode / compartments mode |
+| **click a map cell (i,j)** | tie or untie that loop |
 | **click or drag the colour ribbon** | paint A/B compartments |
-| click bead *i* then bead *j* in 3D | tie a loop (alternative) |
+| click bead i then bead j in 3D | tie a loop (alternative) |
 | drag a bead | grab and pull the polymer |
-| drag empty space / wheel | orbit / zoom |
-| **`ENTER`** | measure and lock in a score |
-| `V` | cycle map view: split / contact / correlation |
-| `SPACE` · `F` · `R` | pause · fast-forward · reset view |
-| `H` or `F1` | help |
-| `M` · `N` · `+/-` | mute · next track · volume |
+| drag empty space / scroll wheel | orbit / zoom the 3D view |
+| **Enter** | measure ensemble and lock in a score |
+| **A** | open / close the structural analysis panel |
+| V | cycle map view: contact / O/E correlation |
+| Space · F · R | pause · fast-forward · reset camera |
+| H or F1 | in-game help |
+| M · N · +/- | mute · next track · volume |
 
-Hovering any map cell lights up the two beads it refers to in 3D.
-
-## Two-player mode
-
-Pick **Versus** on the menu and set the number of rounds (1–5) and an optional
-turn timer.
-
-- **P1 plays loops only** → scored on APA + anchor F1 + short-range SCC.
-- **P2 plays compartments only** → scored on E1 correlation + checkerboard.
-
-They alternate on the same polymer; best round score wins. The two scores are
-genuinely orthogonal — getting the loops right but the colours flat scores
-LOOP 80 / COMP 7, and the reverse scores LOOP 14 / COMP 81.
+---
 
 ## Music
 
-Drop your own piano recordings into `music/` (`.mp3`, `.ogg`, `.wav`, `.flac`).
-They're picked up automatically at launch and play on shuffle-free rotation.
-`M` mutes, `N` skips, `+`/`-` set volume. The game runs fine with no music and
-with no audio device at all.
+The soundtrack is original piano music composed and performed by
+**Sebastian Korsak** (also known as **BlackPianoCat**). The recordings
+live in the `music/` folder and are played on shuffle-free rotation.
+Drop any additional `.mp3`, `.ogg`, `.wav`, or `.flac` files into that
+folder and they will be picked up automatically at the next launch.
 
-## Layout
+`M` mutes, `N` skips to the next track, `+`/`-` adjust volume.
+The game runs correctly with no music files and with no audio device.
+
+---
+
+## Code layout
 
 ```
 chromatin/
-  physics.py     Brownian dynamics: backbone, loops, excluded volume, copolymer, box
-  analysis.py    O/E, correlation, E1, SCC, APA, F1, scoring
-  levels.py      4 levels; targets generated by the game's own physics, then cached
-  render3d.py    software 3D: camera, baked sphere sprites, painter's algorithm
-  widgets.py     heatmaps, E1 track, colour ribbon, metric table
-  colormaps.py   'fall' and 'coolwarm' LUTs, no matplotlib
-  theme.py       palette and type scale
-  audio.py       music transport
-  app.py         states, layout, interaction
+  physics.py        overdamped Langevin: backbone, bending, loops,
+                    excluded volume, copolymer, confinement
+  analysis.py       O/E, correlation matrix, E1, SCC, APA, F1, scoring
+  levels.py         level definitions; targets built by the game's own
+                    physics and cached in .cache/
+  render3d.py       software 3D renderer: camera, Lambert sphere sprites,
+                    painter's algorithm — no OpenGL
+  widgets.py        heatmaps, E1 track, colour ribbon, metric table,
+                    sliders, text fields
+  colormaps.py      fall and coolwarm LUTs, no matplotlib dependency
+  theme.py          palette, typography, font scaling
+  audio.py          music transport
+  app.py            game loop, states, event routing
+  draw.py           all draw_* methods
+  interact.py       mouse and keyboard interaction handlers
+  session.py        Session and LabSession state classes
+  constants.py      shared state constants and parameter groups
+  metrics.py        live structural metrics (Rg, asphericity, etc.)
+  analysis_panel.py live time-series plot grid
+  manual_panel.py   in-game manual renderer
+  manual_content.py manual text, equations, and section structure
+  backend.py        optional numba / GPU acceleration for force kernel
 ```
 
-Targets are generated by running the *game's own* simulator on a hidden ground
-truth, so every level is provably reachable. The first launch of a level spends
-a few seconds building it; the result is cached in `.cache/` and is instant
-afterwards. Solo records land in `records.json`.
+Targets are generated by running the game's own simulator on a hidden
+ground truth, so every level is provably reachable. The first launch of
+a level spends a few seconds building it; the result is cached in `.cache/`
+and is instant afterwards. Solo records land in `records.json`.
+
+---
+
+## Dependencies
+
+```
+pygame-ce >= 2.4    # rendering and audio
+numpy    >= 1.24    # all numerics
+scipy    >= 1.11    # KD-tree neighbour lists for large N
+matplotlib >= 3.7   # equation rendering in the manual
+Pillow   >= 9.0     # tight-crop of rendered equations
+numba    >= 0.58    # optional: multi-core force kernel
+```
+
+GPU acceleration (CUDA) is supported via `cupy` if a compatible device is
+detected at runtime; the game falls back to numba or numpy otherwise.
