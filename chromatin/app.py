@@ -297,10 +297,16 @@ class Game:
             close_img.get_width() + 8,
             close_img.get_height() + 4)
 
-    # =============================================================== events
     def handle_events(self):
         for ev in pygame.event.get():
-            # ---- Manual overlay consumes ALL events while open.
+            # ---- pygame.QUIT must always be handled, even if the manual
+            # is open — this is the OS window close button (the X in the
+            # window title bar), not the in-game manual close button.
+            if ev.type == pygame.QUIT:
+                self.running = False
+                continue
+
+            # ---- Manual overlay consumes ALL other events while open.
             if self.show_manual:
                 if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
                     self.show_manual = False
@@ -317,11 +323,7 @@ class Game:
                            pygame.MOUSEBUTTONUP):
                 self.mouse = ev.pos
 
-            if ev.type == pygame.QUIT:
-                self.running = False
-                continue
-
-            elif ev.type == pygame.VIDEORESIZE:
+            if ev.type == pygame.VIDEORESIZE:
                 w = max(theme.MIN_W, ev.w)
                 h = max(theme.MIN_H, ev.h)
                 self.screen = pygame.display.set_mode(

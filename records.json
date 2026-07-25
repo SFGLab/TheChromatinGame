@@ -48,8 +48,8 @@
     "seed": 3758
   },
   "A Handful of Loops  [hard]": {
-    "best": 67.86,
-    "seed": 543
+    "best": 69.33,
+    "seed": 5491
   },
   "Anatomy of a TAD  [hard]": {
     "best": 47.64,
@@ -58,5 +58,13 @@
   "A Handful of Loops": {
     "best": 60.01,
     "seed": 3109
+  },
+  "Loops Meet Compartments  [hard]": {
+    "best": 44.88,
+    "seed": 1452
+  },
+  "A Locus in Miniature  [hard]": {
+    "best": 7.99,
+    "seed": 8337
   }
 }

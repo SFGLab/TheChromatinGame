@@ -158,7 +158,7 @@ class AnalysisPanel:
             vmin -= 0.5; vmax += 0.5; span = 1.0
 
         # Inner plot area padding
-        lpad, rpad, tpad, bpad = 48, 10, 20, 20
+        lpad, rpad, tpad, bpad = 48, 10, 32, 20
         plot_w = gw - lpad - rpad
         plot_h = gh - tpad - bpad
 
