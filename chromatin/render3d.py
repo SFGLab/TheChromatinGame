@@ -18,13 +18,11 @@ import pygame
 from . import theme, beadcolor, chainshape
 
 # ------------------------------------------------------------------ palette
-# Pastel tones that sit quietly on INK_2 without fighting the Hi-C maps.
-_BEAD_A  = (210, 130, 140)   # soft rose       -- A-type / E1 > 0
-_BEAD_B  = (120, 150, 210)   # periwinkle      -- B-type / E1 < 0
-_BOND    = (210, 215, 230)   # near-white      -- backbone thread
+# Bead A/B, bond, hover and pending tones live in beadcolor.py (theme-aware
+# -- see _COMPARTMENT_DARK/_COMPARTMENT_LIGHT, bond_color(), hover_color()
+# and pending_color() there). The rest of this quiet, dark-INK_2-tuned
+# palette is unique to this module.
 _LOOP_COL= (110, 210, 165)   # sage green      -- loop anchor dots
-_HOVER   = (140, 210, 255)   # light blue      -- hover ring
-_PENDING = (160, 240, 180)   # mint            -- pending anchor pulse
 _MARK    = (240, 200, 110)   # warm amber      -- cross-highlight from map
 
 
@@ -211,7 +209,11 @@ def sphere_sprite(size: int, color, fog: float, bg=None, shiny: bool = False) ->
 def _fog_of(depth: float, near: float, far: float) -> float:
     if far <= near:
         return 0.0
-    return float(np.clip((depth - near) / (far - near), 0.0, 1.0)) * 0.72
+    # Fading toward a light INK_2 (near-white) desaturates colour much faster
+    # than fading toward a dark one, so cap how far light themes fog out --
+    # otherwise distant beads wash out to near-white instead of just dimming.
+    cap = 0.40 if theme.is_light() else 0.72
+    return float(np.clip((depth - near) / (far - near), 0.0, 1.0)) * cap
 
 def _fog_col(col, fog: float) -> tuple:
     return theme.lerp_col(col, theme.INK_2, fog)
@@ -374,7 +376,7 @@ class PolymerView:
                     dm = depth[i] * (1 - (t0+t1)/2) + depth[i+1] * ((t0+t1)/2)
                     w  = max(1.0, self.cam.focal * 0.07 / dm)   # thinner than before
                     f  = _fog_of(dm, near, far)
-                    col = _fog_col(_BOND, f * 0.85)
+                    col = _fog_col(beadcolor.bond_color(), f * 0.85)
                     prims.append((dm, "bond", (a, b, w, col)))
 
         # ---- loop bonds: dashed thin line + small anchor dots
@@ -445,13 +447,13 @@ class PolymerView:
                 # interaction rings
                 if i == self.pending:
                     pulse = 0.5 + 0.5 * math.sin(t * 6.5)
-                    self._ring(surf, pts[i], rad + 3 + 2 * pulse, _PENDING, 2)
+                    self._ring(surf, pts[i], rad + 3 + 2 * pulse, beadcolor.pending_color(), 2)
                 elif i in self.mark:
                     pulse = 0.5 + 0.5 * math.sin(t * 6.5)
                     self._ring(surf, pts[i], rad + 4 + 2 * pulse, _MARK, 2)
                     self._ring(surf, pts[i], rad + 1, _MARK, 1)
                 elif i == self.hover:
-                    self._ring(surf, pts[i], rad + 3, _HOVER, 2)
+                    self._ring(surf, pts[i], rad + 3, beadcolor.hover_color(), 2)
 
                 # index label: only when big enough and not too many beads
                 if show_index and n <= 80 and rad > 9:
@@ -469,7 +471,7 @@ class PolymerView:
         if self.pending is not None and depth[self.pending] > 0.1 and mouse is not None:
             mx, my = mouse
             if rect.collidepoint(mx, my):
-                self._dashed(surf, pts[self.pending], (mx, my), _PENDING, t)
+                self._dashed(surf, pts[self.pending], (mx, my), beadcolor.pending_color(), t)
 
         if self.color_mode == "rainbow":
             beadcolor.draw_colorbar(surf, rect, n)

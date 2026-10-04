@@ -50,7 +50,7 @@ class SimParams:
     gamma: float = 5.0          # friction: higher = calmer, and proportionally slower
 
     k_bond: float = 20.0        # backbone stiffness (dt*k/gamma = 0.004, very stable)
-    k_angle: float = 10.0        # bending rigidity -> smooth, worm-like chain (softened from 14, was too stiff)
+    k_angle: float = 3.0         # bending rigidity -> much floppier chain (softened from 10, still too stiff)
     k_loop: float = 50.0
     k_grab: float = 80.0
 

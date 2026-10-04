@@ -42,7 +42,7 @@ try:
 except Exception:                      # pragma: no cover -- panda3d optional
     HAVE_PANDA = False
 
-_BOND    = (210, 215, 230)
+# Bond colour lives in beadcolor.py (theme-aware -- see bond_color()).
 _LOOP_COL = (110, 210, 165)
 
 
@@ -297,7 +297,7 @@ class PandaPolymerView:
                     continue
                 dm = (depth[i] + depth[i + 1]) / 2
                 f = _fog_of(dm, near, far)
-                col = _fog_col(_BOND, f * 0.85)
+                col = _fog_col(beadcolor.bond_color(), f * 0.85)
                 w = max(1.0, self.cam.focal * 0.07 / dm)
                 ls.setThickness(w)
                 ls.setColor(col[0] / 255, col[1] / 255, col[2] / 255, 1.0)
@@ -367,13 +367,13 @@ class PandaPolymerView:
             f = _fog_of(depth[i], near, far)
             if i == self.pending:
                 pulse = 0.5 + 0.5 * math.sin(t * 6.5)
-                self._ring(surf, pts[i], rad + 3 + 2 * pulse, (160, 240, 180), 2)
+                self._ring(surf, pts[i], rad + 3 + 2 * pulse, beadcolor.pending_color(), 2)
             elif i in self.mark:
                 pulse = 0.5 + 0.5 * math.sin(t * 6.5)
                 self._ring(surf, pts[i], rad + 4 + 2 * pulse, (240, 200, 110), 2)
                 self._ring(surf, pts[i], rad + 1, (240, 200, 110), 1)
             elif i == self.hover:
-                self._ring(surf, pts[i], rad + 3, (140, 210, 255), 2)
+                self._ring(surf, pts[i], rad + 3, beadcolor.hover_color(), 2)
             if show_index and n <= 80 and rad > 9:
                 fnt = theme.font(max(9, int(rad * 0.75)), mono=True, bold=True)
                 lab = fnt.render(str(i), True, (255, 255, 255))
@@ -387,7 +387,7 @@ class PandaPolymerView:
         if self.pending is not None and depth[self.pending] > 0.1 and mouse is not None:
             mx, my = mouse
             if rect.collidepoint(mx, my):
-                self._dashed(surf, pts[self.pending], (mx, my), (160, 240, 180), t)
+                self._dashed(surf, pts[self.pending], (mx, my), beadcolor.pending_color(), t)
         if self.color_mode == "rainbow":
             beadcolor.draw_colorbar(surf, rect, n)
         if show_box:

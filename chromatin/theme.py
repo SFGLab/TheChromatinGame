@@ -106,6 +106,12 @@ def cycle_theme(name: str) -> str:
     return THEME_ORDER[(i + 1) % len(THEME_ORDER)]
 
 
+def is_light() -> bool:
+    """True for a light theme (daylight/paper) -- used where a colour tuned
+    to sit on a dark background would look washed out on a light one."""
+    return THEMES[CURRENT_THEME]["kind"] == "light"
+
+
 set_theme(DEFAULT_THEME)   # populate INK/PANEL/TEXT/... module globals at import
 
 # --- fonts ------------------------------------------------------------------

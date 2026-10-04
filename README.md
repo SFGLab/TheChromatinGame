@@ -347,6 +347,32 @@ and is instant afterwards. Solo records land in `records.json`.
 
 ---
 
+## Resetting progress & clearing the cache
+
+The game writes three things next to `main.py`, all plain files/folders you
+can delete by hand at any time -- nothing about the code itself depends on
+them, and the game quietly recreates whatever it needs on the next launch.
+
+| Path | What it holds | Effect of deleting it |
+|---|---|---|
+| `.cache/` | Cached level targets (`target_<hash>.npz`, one per level + seed) | Safe any time. The next time that level loads it spends a few seconds re-running the hidden ground-truth simulation; the result is identical either way since targets are fully reproducible from their seed. |
+| `records.json` | Your best score per level, separately for easy and hard mode, with the seed that earned it | Clears all personal records back to empty -- next play on any level is a fresh "new record". |
+| `settings.json` | Volume, theme, resolution, fullscreen, font size | Resets to the defaults (Daylight theme, small font, 1600x900 windowed, fullscreen off, full volume). |
+
+To wipe everything and start completely fresh, close the game and run
+(from the project root, where `main.py` lives):
+
+```bash
+rm -rf .cache records.json settings.json
+```
+
+Deleting only `.cache/` is the handy one if a level ever seems stuck on a
+stale or corrupt target -- the game already falls back to rebuilding it
+automatically if the cached file fails to load, so this is mostly for
+reclaiming disk space or forcing a clean rebuild by hand.
+
+---
+
 ## Dependencies
 
 ```
