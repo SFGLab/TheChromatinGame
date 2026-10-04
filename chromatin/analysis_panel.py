@@ -203,7 +203,7 @@ class AnalysisPanel:
         if len(pts) >= 2:
             pygame.draw.lines(sc, col, False, pts, 2)
         if pts:
-            pygame.draw.circle(sc, col,       pts[-1], 4)
-            pygame.draw.circle(sc, theme.TEXT, pts[-1], 4, 1)
+            theme.circle(sc, col,       pts[-1], 4)
+            theme.circle(sc, theme.TEXT, pts[-1], 4, 1)
 
         sc.set_clip(prev_clip)

@@ -14,8 +14,11 @@ from . import analysis as an
 from . import theme, widgets
 from .audio import Music
 from .levels import LEVELS, build_target
-from .physics import A_TYPE, B_TYPE, MIN_LOOP_SPAN, Polymer, SimParams, SimulationUnstable
-from .render3d import PolymerView
+from .physics import A_TYPE, B_TYPE, MIN_LOOP_SPAN, SimParams, SimulationUnstable
+from .physics_jax import FastPolymer   # same engine as Session/LabSession -- see physics_jax.py
+from .render3d import Camera
+from .polymer_view import create_polymer_view
+from . import beadcolor, chainshape
 from .session import Session, LabSession
 from .manual_panel import ManualPanel
 from .constants import *
@@ -33,6 +36,7 @@ DEFAULT_SETTINGS = {
     "font_mode": "small",     # "small" | "large"
     "resolution": 1,           # index into RESOLUTIONS
     "fullscreen": False,
+    "theme": theme.DEFAULT_THEME,   # light by default; see theme.THEME_ORDER
 }
 
 def load_records() -> dict:
@@ -70,6 +74,7 @@ class Game:
         pygame.init()
         pygame.display.set_caption("The Chromatin Game")
         self.settings = load_settings()
+        theme.set_theme(self.settings["theme"])
         self.screen = None
         self.apply_display_settings()
         self.clock = pygame.time.Clock()
@@ -80,7 +85,7 @@ class Game:
         self.state = MENU
         self.running = True
         self.t0 = time.time()
-        self.view = PolymerView()
+        self.view = create_polymer_view()   # GPU (Panda3D) if available, else software
         self.hm_tgt = widgets.Heatmap("experimental  /  target")
         self.hm_sim = widgets.Heatmap("simulated  /  yours")
 
@@ -102,11 +107,11 @@ class Game:
         self.toast_t = 0.0
 
         self.lab: LabSession | None = None
-        self.lab_view = PolymerView()
+        self.lab_view = create_polymer_view()
         self.hm_lab_a = widgets.Heatmap("contact  ·  reds")
         self.hm_lab_b = widgets.Heatmap("correlation  ·  coolwarm")
         self.lab_sliders: dict[str, widgets.Slider] = {}
-        self.lab_bead_field: widgets.TextField | None = None    # <-- ADD THIS
+        self.lab_bead_slider: widgets.Slider | None = None
         self.lab_scroll = 0
         
         # workers
@@ -114,8 +119,9 @@ class Game:
         self._work_result = [None]
         self._work_thread: threading.Thread | None = None
 
-        # menu ambience
-        self.demo = Polymer(30, SimParams(), seed=5)
+        # menu ambience -- FastPolymer too, so every simulation in the game
+        # (menu, Lab, Play) runs on the exact same JAX-fused engine.
+        self.demo = FastPolymer(30, SimParams(), seed=5)
         rng = np.random.default_rng(3)
         t = np.empty(30, dtype=np.int8)
         i, cur = 0, A_TYPE
@@ -126,7 +132,8 @@ class Game:
             i += L
         self.demo.load_config(t, [(3, 12), (15, 26)])
         self.demo.step(400)
-        self.demo_view = PolymerView()
+        self.demo.step(6)   # pre-compile the per-frame step count too (see update())
+        self.demo_view = create_polymer_view()
         self.demo_view.cam.dist = 13.0
 
         # interaction
@@ -195,6 +202,12 @@ class Game:
                 s.show_analysis = not s.show_analysis
                 # if s.show_analysis:
                 #     s.analysis_panel.reset()
+            elif n.startswith("Colour:"):
+                mode = self.view.cycle_color_mode()
+                self.say(f"colour mode: {beadcolor.MODE_LABEL[mode]}")
+            elif n.startswith("Shape:"):
+                mode = self.view.cycle_rep_mode()
+                self.say(f"shape: {chainshape.REP_LABEL[mode]}")
 
         elif self.state == RESULTS:
             if n == "Back to menu":
@@ -214,6 +227,12 @@ class Game:
             elif n in ("Small", "Large"):
                 self.settings["font_mode"] = n.lower()
                 theme.set_font_scale(self.settings["font_mode"])
+            elif n.startswith("Theme:"):
+                name = n.split(":", 1)[1]
+                self.settings["theme"] = name
+                theme.set_theme(name)
+            elif n in ("Play music", "Pause music", "Resume music"):
+                self.music.toggle_pause()
             elif n == "Windowed":
                 self.settings["fullscreen"] = False
                 self.apply_display_settings()
@@ -253,6 +272,12 @@ class Game:
                 lab.show_analysis = not lab.show_analysis
                 # if lab.show_analysis:
                 #     lab.analysis_panel.reset()
+            elif n.startswith("Colour:"):
+                mode = self.lab_view.cycle_color_mode()
+                self.say(f"colour mode: {beadcolor.MODE_LABEL[mode]}")
+            elif n.startswith("Shape:"):
+                mode = self.lab_view.cycle_rep_mode()
+                self.say(f"shape: {chainshape.REP_LABEL[mode]}")
 
     def apply_display_settings(self) -> None:
         """(Re)create the window with the current settings and apply font scale."""
@@ -355,15 +380,13 @@ class Game:
             if self.state == PLAY and not self.show_help:
                 self.on_play_mouse(ev)
 
-            # ---- Lab-screen controls (sliders, bead field, 3D + heatmap)
+            # ---- Lab-screen controls (sliders, bead count, 3D + heatmap)
             if self.state == LAB and self.lab is not None:
                 for sl in self.lab_sliders.values():
                     if sl.handle(ev):
                         self.lab.apply_param(sl.key, sl.value)
-                if self.lab_bead_field is not None:
-                    new_n = self.lab_bead_field.handle(ev)
-                    if new_n is not None:
-                        self.lab.set_bead_count(new_n)
+                if self.lab_bead_slider is not None and self.lab_bead_slider.handle(ev):
+                    self.lab.set_bead_count(int(self.lab_bead_slider.value))
                 self.on_lab_mouse(ev)
 
     def handle_event(self, ev) -> str:
@@ -426,8 +449,14 @@ class Game:
             self.show_help = not self.show_help
             return
         if k == pygame.K_m:
-            self.music.toggle_mute()
-            self.say("music muted" if self.music.muted else "music on")
+            # one key for both jobs: first press starts the music,
+            # every press after that just mutes / unmutes it
+            if not self.music.started:
+                self.music.toggle_pause()
+                self.say(self.music.title())
+            else:
+                self.music.toggle_mute()
+                self.say("music muted" if self.music.muted else "music on")
             return
         if k == pygame.K_n:
             self.music.next()
@@ -462,9 +491,6 @@ class Game:
 
         if self.state == LAB:
             lab = self.lab
-            # Let the bead-count text field own all keystrokes while focused
-            if self.lab_bead_field is not None and self.lab_bead_field.focused:
-                return
             if k == pygame.K_SPACE:
                 lab.paused = not lab.paused
             elif k == pygame.K_a:
@@ -472,6 +498,12 @@ class Game:
                 lab.show_analysis = not lab.show_analysis
                 if lab.show_analysis:
                     lab.analysis_panel.reset()
+            elif k == pygame.K_t:
+                mode = self.lab_view.cycle_color_mode()
+                self.say(f"colour mode: {beadcolor.MODE_LABEL[mode]}")
+            elif k == pygame.K_g:
+                mode = self.lab_view.cycle_rep_mode()
+                self.say(f"shape: {chainshape.REP_LABEL[mode]}")
             return
 
         if self.state != PLAY:
@@ -503,9 +535,15 @@ class Game:
             s.paused = not s.paused
             self.say("paused" if s.paused else "running")
         elif k == pygame.K_r:
-            self.view.cam = PolymerView().cam
+            self.view.cam = Camera()
             self.view.cam.dist = s.poly.box * 3.4
             self.say("view reset")
+        elif k == pygame.K_t:
+            mode = self.view.cycle_color_mode()
+            self.say(f"colour mode: {beadcolor.MODE_LABEL[mode]}")
+        elif k == pygame.K_g:
+            mode = self.view.cycle_rep_mode()
+            self.say(f"shape: {chainshape.REP_LABEL[mode]}")
         elif k == pygame.K_f:
             s.poly.step(600)
             s.sim_time += 600 * s.poly.p.dt
@@ -533,14 +571,17 @@ class Game:
 
         self._work_thread = threading.Thread(target=worker, daemon=True)
         self._work_thread.start()
-        self.music.start_if_idle()
+        # music no longer autoplays -- the user starts it (Settings, or P)
 
     def start_lab(self) -> None:
         seed = int(np.random.default_rng().integers(1, 9999))
         self.lab = LabSession(n=40, seed=seed)
         self.lab_scroll = 0
+        # Sliders are built once here and reused every frame in draw_lab_panel
+        # (not rebuilt per-frame), so a fresh Lab session starts with a clean set.
+        self.lab_sliders = {}
+        self.lab_bead_slider = None
         self.state = LAB
-        self.music.start_if_idle()
 
     def begin_measure(self):
         s = self.session
@@ -689,7 +730,7 @@ from .draw import (
     draw, compute_layout, paint_background,
     draw_menu, draw_settings, draw_loading, draw_play,
     draw_lab, draw_lab_panel, compute_lab_layout,   # <-- compute_lab_layout added
-    draw_view_hud, draw_header, draw_footer,
+    draw_view_hud, draw_view_controls, draw_header, draw_footer,
     draw_settle_overlay, draw_results, draw_help, draw_toast,
 )
 from .interact import (
@@ -701,7 +742,7 @@ for _fn in [
     draw, compute_layout, paint_background,
     draw_menu, draw_settings, draw_loading, draw_play,
     draw_lab, draw_lab_panel, compute_lab_layout,   # <-- added here too
-    draw_view_hud, draw_header, draw_footer,
+    draw_view_hud, draw_view_controls, draw_header, draw_footer,
     draw_settle_overlay, draw_results, draw_help, draw_toast,
     on_play_mouse, on_lab_mouse, map_click, click_bead,
     ribbon_bin, ribbon_bin_n, set_mode,

@@ -4,3 +4,10 @@ numpy>=1.24
 scipy>=1.11         # Verlet neighbour lists (cKDTree), needed for N up to 1000
 matplotlib>=3.7
 Pillow>=9.0
+jax>=0.4             # JIT-fused physics stepping (chromatin/physics_jax.py). Uses the
+                     #   GPU automatically when one is available, else CPU -- for GPU
+                     #   accel install the matching extra instead of plain jax/jaxlib,
+                     #   e.g. `pip install "jax[cuda12]"` (NVIDIA) or "jax[metal]" (Mac)
+jaxlib>=0.4          # optional: the game runs on plain NumPy physics if jax isn't installed
+panda3d>=1.10        # optional: GPU 3D view (chromatin/render3d_gpu.py); falls back to
+                     #           the software renderer in chromatin/render3d.py if absent

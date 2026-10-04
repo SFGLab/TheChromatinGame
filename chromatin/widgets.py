@@ -5,7 +5,6 @@ import math
 
 import numpy as np
 import pygame
-import time
 
 from . import colormaps as cm
 from . import theme
@@ -19,13 +18,20 @@ MODE_LABEL = {
 
 
 # ---------------------------------------------------------------- chrome
-def panel(surf, rect, *, fill=theme.PANEL, border=theme.RULE, radius=theme.RADIUS):
+# NOTE: colour defaults below are `None`, resolved to the *current* theme
+# inside the function body -- not bound to a theme.X value at def-time,
+# which would freeze call sites that don't pass a colour to whatever theme
+# was active when the module was first imported (see theme.set_theme()).
+def panel(surf, rect, *, fill=None, border=None, radius=theme.RADIUS):
+    fill = theme.PANEL if fill is None else fill
+    border = theme.RULE if border is None else border
     pygame.draw.rect(surf, fill, rect, border_radius=radius)
     pygame.draw.rect(surf, border, rect, 1, border_radius=radius)
 
 
-def label(surf, text, x, y, *, size=12, col=theme.TEXT_DIM, mono=False, bold=False,
+def label(surf, text, x, y, *, size=12, col=None, mono=False, bold=False,
           center=False, right=False):
+    col = theme.TEXT_DIM if col is None else col
     f = theme.font(size, mono=mono, bold=bold)
     img = f.render(text, True, col)
     if center:
@@ -36,8 +42,9 @@ def label(surf, text, x, y, *, size=12, col=theme.TEXT_DIM, mono=False, bold=Fal
     return img.get_rect(topleft=(x, y))
 
 
-def eyebrow(surf, text, x, y, col=theme.TEXT_FAINT):
+def eyebrow(surf, text, x, y, col=None):
     """Small tracked-out caps label. Used to name every panel."""
+    col = theme.TEXT_FAINT if col is None else col
     f = theme.font(10, bold=True)
     cx = x
     for ch in text.upper():
@@ -48,11 +55,12 @@ def eyebrow(surf, text, x, y, col=theme.TEXT_FAINT):
 
 
 class Button:
-    def __init__(self, rect, text, *, key=None, accent=theme.CYAN, size=13, icon=None):
+    def __init__(self, rect, text, *, key=None, accent=None, size=13, icon=None, label=None):
         self.rect = pygame.Rect(rect)
-        self.text = text
+        self.text = text              # dispatch id, matched in on_button()
+        self.label = label or text    # what's actually drawn on the button
         self.key = key
-        self.accent = accent
+        self.accent = theme.CYAN if accent is None else accent
         self.size = size
         self.icon = icon
         self.hover = False
@@ -80,7 +88,7 @@ class Button:
         pygame.draw.rect(surf, bg, self.rect, border_radius=6)
         pygame.draw.rect(surf, bd, self.rect, 1, border_radius=6)
         f = theme.font(self.size, bold=self.active)
-        img = f.render(self.text, True, fg)
+        img = f.render(self.label, True, fg)
         surf.blit(img, img.get_rect(center=self.rect.center))
         if self.key:
             kf = theme.font(9, mono=True)
@@ -155,71 +163,6 @@ def colorbars(surf, rect, sc: Scale, mode: str):
         label(surf, f"{sc.cap:+.2f}", x + 116, rect.y + 20, size=9,
               col=theme.TEXT_FAINT, mono=True, right=True)
         
-class TextField:
-    """A click-to-focus integer input. Type digits, Enter commits, Escape
-    cancels, click elsewhere commits. Clamped to [lo, hi] on commit."""
-
-    def __init__(self, rect, value: int, lo: int, hi: int):
-        self.rect = pygame.Rect(rect)
-        self.lo, self.hi = lo, hi
-        self.value = int(value)
-        self.text = str(self.value)
-        self.focused = False
-        self.enabled = True
-
-    def _commit(self) -> int | None:
-        try:
-            v = int(self.text)
-        except ValueError:
-            v = self.value
-        v = max(self.lo, min(self.hi, v))
-        changed = v != self.value
-        self.value = v
-        self.text = str(v)
-        return v if changed else None
-
-    def handle(self, ev):
-        """Returns the new int value the frame it's committed, else None."""
-        if not self.enabled:
-            return None
-        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-            was_focused = self.focused
-            self.focused = self.rect.collidepoint(ev.pos)
-            if was_focused and not self.focused:
-                return self._commit()
-            if self.focused:
-                self.text = str(self.value)
-            return None
-        if not self.focused or ev.type != pygame.KEYDOWN:
-            return None
-        if ev.key == pygame.K_RETURN or ev.key == pygame.K_KP_ENTER:
-            self.focused = False
-            return self._commit()
-        if ev.key == pygame.K_ESCAPE:
-            self.text = str(self.value)
-            self.focused = False
-            return None
-        if ev.key == pygame.K_BACKSPACE:
-            self.text = self.text[:-1]
-            return None
-        if ev.unicode.isdigit() and len(self.text) < 5:
-            self.text = (self.text + ev.unicode).lstrip("0") or "0"
-        return None
-
-    def draw(self, sc) -> None:
-        r = self.rect
-        col = theme.CYAN if self.focused else theme.RULE
-        pygame.draw.rect(sc, theme.PANEL, r, border_radius=5)
-        pygame.draw.rect(sc, col, r, 2 if self.focused else 1, border_radius=5)
-        f = theme.font(13, mono=True)
-        shown = self.text if self.focused else str(self.value)
-        img = f.render(shown, True, theme.TEXT)
-        sc.blit(img, (r.x + 10, r.centery - img.get_height() // 2))
-        if self.focused:
-            cx = r.x + 10 + img.get_width() + 2
-            if int(time.time() * 2) % 2 == 0:
-                pygame.draw.line(sc, theme.CYAN, (cx, r.y + 6), (cx, r.bottom - 6), 2)
-
 class Heatmap:
     """A square Hi-C panel. Default view is split: contact frequency below the
     diagonal, O/E correlation above it -- loops and compartments in one square.
@@ -252,8 +195,9 @@ class Heatmap:
         return None
 
     def draw(self, surf, P, C, mode, loops_true=None, loops_player=None, *,
-             subtitle: str = "", accent=theme.TEXT_FAINT, live: bool = False,
+             subtitle: str = "", accent=None, live: bool = False,
              mouse=None, scale: "Scale | None" = None):
+        accent = theme.TEXT_FAINT if accent is None else accent
         n = P.shape[0]
         sc = scale or Scale(P, C)
         sig = (id(P), float(P.sum()), float(C.sum()), mode, n, self.grid.w, sc.key)
@@ -278,6 +222,9 @@ class Heatmap:
         surf.blit(self._surf, self.grid)
         pygame.draw.rect(surf, theme.RULE, self.grid, 1)
 
+        # Grid/diagonal/loop-marker overlays below are fixed B&W, not theme
+        # colours -- they sit on the Hi-C "fall" ramp image, a scientific
+        # convention independent of the UI theme (see module docstring).
         cell = self.grid.w / n
         if cell >= 9:                       # bin gridlines only when they can breathe
             gs = pygame.Surface(self.grid.size, pygame.SRCALPHA)
@@ -333,12 +280,12 @@ class Heatmap:
         r = max(2.5, min(6.0, cell * 0.34))
         if filled:
             g = pygame.Surface((int(r * 6), int(r * 6)), pygame.SRCALPHA)
-            pygame.draw.circle(g, (*col, 55), (int(r * 3), int(r * 3)), int(r * 2.6))
+            theme.circle(g, (*col, 55), (int(r * 3), int(r * 3)), int(r * 2.6))
             surf.blit(g, (cx - r * 3, cy - r * 3))
-            pygame.draw.circle(surf, col, (int(cx), int(cy)), int(r))
-            pygame.draw.circle(surf, (255, 255, 255), (int(cx), int(cy)), int(r), 1)
+            theme.circle(surf, col, (int(cx), int(cy)), int(r))
+            theme.circle(surf, (255, 255, 255), (int(cx), int(cy)), int(r), 1)
         else:
-            pygame.draw.circle(surf, col, (int(cx), int(cy)), int(r + 1.5), 1)
+            theme.circle(surf, col, (int(cx), int(cy)), int(r + 1.5), 1)
 
 
 # ------------------------------------------------------------- E1 track
@@ -446,7 +393,8 @@ def metric_table(surf, rect, rep, *, live=False):
 
     return y
 
-def big_score(surf, rect, value, caption, accent=theme.CYAN):
+def big_score(surf, rect, value, caption, accent=None):
+    accent = theme.CYAN if accent is None else accent
     panel(surf, rect, fill=theme.INK_2, border=theme.RULE)
     eyebrow(surf, caption, rect.x + 10, rect.y + 8, accent)
     f = theme.font(int(rect.h * 0.52), mono=True, bold=True)
@@ -531,5 +479,5 @@ class Slider:
         # handle grows slightly while being dragged -- visual confirmation
         # that the grab registered
         radius = 9 if self.dragging else 7
-        pygame.draw.circle(sc, theme.TEXT, (hx, track.centery), radius)
-        pygame.draw.circle(sc, col, (hx, track.centery), radius, 2)
+        theme.circle(sc, theme.TEXT, (hx, track.centery), radius)
+        theme.circle(sc, col, (hx, track.centery), radius, 2)

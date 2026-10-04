@@ -4,6 +4,7 @@ import time
 import numpy as np
 from . import analysis as an
 from .physics import A_TYPE, B_TYPE, MIN_LOOP_SPAN, Polymer, SimParams, SimulationUnstable
+from .physics_jax import FastPolymer   # same physics, JIT-fused stepping
 from . import widgets
 from .constants import *
 from .analysis_panel import AnalysisPanel
@@ -48,7 +49,12 @@ class Session:
     def begin(self, target):
         self.target = target
         n = target.n
-        self.poly = Polymer(n, SimParams(), seed=self.seed * 31 + 7)
+        # FastPolymer: identical force field to Polymer, just a JIT-fused
+        # stepping loop -- see physics_jax.py. warm_up() pays the one-off
+        # compile cost here (loading screen is still up) rather than as a
+        # stutter on the first frame of play.
+        self.poly = FastPolymer(n, SimParams(), seed=self.seed * 31 + 7)
+        self.poly.warm_up()
         self.P_live = self.poly.contacts()
         self.refresh_live(force=True)
         self.turn_start = time.time()
@@ -78,7 +84,8 @@ class LabSession:
     def __init__(self, n: int, seed: int):
         self.seed = seed
         self.params = SimParams()
-        self.poly = Polymer(n, self.params, seed=seed)
+        self.poly = FastPolymer(n, self.params, seed=seed)
+        self.poly.warm_up()
         self.analysis_panel = AnalysisPanel()
         self.show_analysis = False
 
@@ -142,12 +149,18 @@ class LabSession:
             self.poly.step(self.poly.p.steps_per_frame)
             if not np.all(np.isfinite(self.poly.pos)):
                 raise SimulationUnstable("positions diverged (NaN/Inf)")
-            c = self.poly.contacts()
-            if not np.all(np.isfinite(c)):
-                raise SimulationUnstable("contact map diverged (NaN/Inf)")
-            self.P_live = 0.985 * self.P_live + 0.015 * c
             self._frame += 1
-            self._refresh()
+            # contacts() is O(N^2); the _refresh() pipeline adds an eigh on
+            # top of that -- both too costly to pay every single frame, same
+            # idea as Session.update() in the main game. Throttled, the live
+            # heatmap/eigenvector still look continuous to the eye.
+            if self._frame % 2 == 0:
+                c = self.poly.contacts()
+                if not np.all(np.isfinite(c)):
+                    raise SimulationUnstable("contact map diverged (NaN/Inf)")
+                self.P_live = 0.985 * self.P_live + 0.015 * c
+            if self._frame % 8 == 0:
+                self._refresh()
         except SimulationUnstable as e:
             self.unstable = True
             self.unstable_reason = f"{e}  --  {self._diagnose_instability()}"
@@ -217,7 +230,7 @@ class LabSession:
             types = np.concatenate([old_types, np.full(new_n - old_n, fill, dtype=np.int8)])
             loops = list(old_loops)
 
-        self.poly = Polymer(new_n, self.params, seed=self.seed)
+        self.poly = FastPolymer(new_n, self.params, seed=self.seed)
         self.poly.load_config(types, loops)
         self.P_live = self.poly.contacts()
         # A fresh Polymer is unlikely to inherit instability, but resetting

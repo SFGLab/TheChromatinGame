@@ -2,8 +2,11 @@
 
 `fall`     -- the white-to-black ramp used for raw Hi-C contact frequency.
 `coolwarm` -- the diverging ramp used for the O/E correlation checkerboard.
+`rainbow`  -- a per-bead-index ramp for the 3D view's "rainbow" colour mode.
 """
 from __future__ import annotations
+
+import colorsys
 
 import numpy as np
 
@@ -39,8 +42,19 @@ def _build(anchors) -> np.ndarray:
     return lut
 
 
+def _build_rainbow() -> np.ndarray:
+    """Hue sweep 0 -> 290 degrees (red to violet, skipping the final wedge
+    back to red) so bead index 0 and bead index N-1 are visibly different
+    colours -- a closed hue loop would make the two ends of the chain look
+    the same, which defeats the point of a per-bead rainbow."""
+    t = np.linspace(0.0, 290.0 / 360.0, 256)
+    rgb = np.array([colorsys.hsv_to_rgb(h, 0.78, 1.0) for h in t])
+    return np.clip(rgb * 255.0, 0, 255).astype(np.uint8)
+
+
 COOLWARM = _build(_COOLWARM_ANCHORS)
 FALL = _build(_FALL_ANCHORS)
+RAINBOW = _build_rainbow()
 
 # A colour reserved for genuinely broken data (NaN/Inf) so it's visually
 # obvious something diverged, rather than silently rendering as index 0 or

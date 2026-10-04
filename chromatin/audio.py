@@ -22,6 +22,7 @@ class Music:
         self.volume = 0.55
         self.muted = False
         self.shuffle = False
+        self.started = False   # True once play() has run at least once this session
         self.END = pygame.USEREVENT + 7
         try:
             if not pygame.mixer.get_init():
@@ -68,6 +69,7 @@ class Music:
             pygame.mixer.music.set_volume(0.0 if self.muted else self.volume)
             pygame.mixer.music.play()
             pygame.mixer.music.set_endevent(self.END)
+            self.started = True
         except Exception:
             # a bad file should never take the game down; skip past it
             if len(self.tracks) > 1:
@@ -97,16 +99,24 @@ class Music:
         self.play()
 
     def toggle_pause(self) -> None:
+        """The explicit user control: starts music the first time, then just
+        pauses/resumes. (Without the `started` check, unpause() on music that
+        was never played silently does nothing.)"""
         if not self.has_music:
+            return
+        if not self.started:
+            self.play()
             return
         if pygame.mixer.music.get_busy():
             pygame.mixer.music.pause()
-            self._paused = True
         else:
             try:
                 pygame.mixer.music.unpause()
             except Exception:
                 self.play()
+
+    def is_playing(self) -> bool:
+        return self.ok and self.started and pygame.mixer.music.get_busy()
 
     def toggle_mute(self) -> None:
         self.muted = not self.muted

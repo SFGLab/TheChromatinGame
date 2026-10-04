@@ -34,7 +34,7 @@ A_TYPE = 1    # red  -- positive E1 -- weak self-attraction   (euchromatin)
 B_TYPE = -1   # blue -- negative E1 -- strong self-attraction (heterochromatin)
 
 MIN_LOOP_SPAN = 3       # |i - j| must be at least this: no loop onto a neighbour
-N_MIN, N_MAX = 10, 200  # small polymers only, chosen for interactive feel
+N_MIN, N_MAX = 10, 150  # small polymers only, chosen for interactive feel
 
 class SimulationUnstable(RuntimeError):
     """Raised when the integrator has diverged (NaN/Inf positions), typically
@@ -49,8 +49,8 @@ class SimParams:
     kT: float = 0.5
     gamma: float = 5.0          # friction: higher = calmer, and proportionally slower
 
-    k_bond: float = 400.0       # stiff backbone     (dt*k/gamma = 0.25, stable)
-    k_angle: float = 20.0        # bending rigidity -> smooth, worm-like chain
+    k_bond: float = 20.0        # backbone stiffness (dt*k/gamma = 0.004, very stable)
+    k_angle: float = 10.0        # bending rigidity -> smooth, worm-like chain (softened from 14, was too stiff)
     k_loop: float = 50.0
     k_grab: float = 80.0
 

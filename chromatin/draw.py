@@ -57,12 +57,22 @@ def draw(self):
     if self.show_manual:
         self.manual.draw(self.screen, W, H)
 
+# Fixed pixel height draw_play needs below the heatmap square for the E1
+# tracks, colour ribbon, metric table, score and colorbars (see draw_play).
+# compute_layout uses this to cap the heatmap size so that whole stack never
+# runs past the footer on a short window -- keep the two in sync if either
+# section's layout changes.
+PLAY_RIGHT_CHROME_H = 412
+
+
 def compute_layout(self, W, H):
     """Compute rects for the PLAY screen: header/footer/viewport/heatmaps.
 
     All sizes scale with theme.FONT_SCALE so Large font mode gets more room.
-    The Lab has its own layout function (compute_lab_layout) because it has
-    a completely different panel arrangement.
+    The heatmap square is also capped by the window's HEIGHT (not just its
+    width) so the metric table/score/colorbars stacked below it never run
+    past the footer on a short window. The Lab has its own layout function
+    (compute_lab_layout) because it has a completely different arrangement.
     """
     S = getattr(theme, "FONT_SCALE", 1.0)
     P     = int(theme.PAD * S)
@@ -82,7 +92,9 @@ def compute_layout(self, W, H):
     label_h = int(22 * S)
     inner   = int(32 * S)
     hm_w    = (right.w - P) // 2
-    side    = max(80, hm_w - inner)
+    side_by_w = hm_w - inner
+    side_by_h = right.h - PLAY_RIGHT_CHROME_H - title_h - label_h - P
+    side    = max(80, min(side_by_w, side_by_h))
     hm_h    = title_h + side + label_h
 
     self.rects = {
@@ -151,19 +163,28 @@ def draw_menu(self, W, H):
     sc.blit(veil, (0, 0))
 
     x = 70
+    # Vertical rhythm: every gap/button-height below scales down on short
+    # windows (clamped to theme.MIN_H) so the whole menu -- title through the
+    # MiNI-Lab/Manual row -- always clears the bottom music strip instead of
+    # overlapping it. At comfortable heights (>=~900) VS is just 1.0, so
+    # nothing changes from the original fixed layout.
+    VS = max(0.75, min(1.0, (0.84 * H - 90) / 668))
+    def V(px): return int(px * VS)
+
     y = int(H * 0.16)
     widgets.eyebrow(sc, "a polymer physics game about reading hi-c", x, y, theme.CYAN)
     f = theme.font(64, bold=True)
-    sc.blit(f.render("THE CHROMATIN", True, theme.TEXT), (x - 3, y + 18))
-    sc.blit(f.render("       GAME",   True, theme.GREEN), (x - 3, y + 88))
-    widgets.label(sc, "Build the fold. Match the map.", x, y + 182, size=16,
+    sc.blit(f.render("THE CHROMATIN", True, theme.TEXT), (x - 3, y + V(18)))
+    sc.blit(f.render("       GAME",   True, theme.GREEN), (x - 3, y + V(88)))
+    widgets.label(sc, "Build the fold. Match the map.", x, y + V(182), size=16,
                   col=theme.TEXT_DIM)
 
     # ---- Level chooser
-    y2 = y + 222
+    y2 = y + V(222)
     widgets.eyebrow(sc, "locus", x, y2)
+    row_h = V(46)
     for i, lvl in enumerate(LEVELS):
-        r = pygame.Rect(x, y2 + 22 + i * 46, 340, 28)
+        r = pygame.Rect(x, y2 + V(22) + i * row_h, 340, V(28))
         b = widgets.Button(r, lvl.name, size=13)
         b.active = (i == self.sel_level)
         self.buttons[f"lvl{i}"] = b
@@ -179,19 +200,20 @@ def draw_menu(self, W, H):
                           size=11, col=theme.AMBER, mono=True)
 
     # ---- Mode row: Solo / Versus + difficulty Easy / Hard
-    y3 = y2 + 18 + len(LEVELS) * 46 + 16
+    y3 = y2 + V(18) + len(LEVELS) * row_h + V(16)
     widgets.eyebrow(sc, "mode", x, y3)
 
-    b1 = widgets.Button((x,       y3 + 22, 110, 30), "Solo")
-    b2 = widgets.Button((x + 118, y3 + 18, 110, 30), "Versus", accent=theme.MAGENTA)
+    bh_mode = V(30)
+    b1 = widgets.Button((x,       y3 + V(22), 110, bh_mode), "Solo")
+    b2 = widgets.Button((x + 118, y3 + V(18), 110, bh_mode), "Versus", accent=theme.MAGENTA)
     b1.active = not self.sel_two
     b2.active = self.sel_two
     self.buttons["solo"]   = b1
     self.buttons["versus"] = b2
     b1.draw(sc); b2.draw(sc)
 
-    bd1 = widgets.Button((x + 480, y3 + 18, 90, 30), "Easy")
-    bd2 = widgets.Button((x + 574, y3 + 18, 90, 30), "Hard", accent=theme.POOR)
+    bd1 = widgets.Button((x + 480, y3 + V(18), 90, bh_mode), "Easy")
+    bd2 = widgets.Button((x + 574, y3 + V(18), 90, bh_mode), "Hard", accent=theme.POOR)
     bd1.active = not self.sel_hard
     bd2.active = self.sel_hard
     self.buttons["easy"] = bd1
@@ -199,57 +221,60 @@ def draw_menu(self, W, H):
     bd1.draw(sc); bd2.draw(sc)
     if self.sel_hard:
         widgets.label(sc, "hard: no loop dots, no E1 track on the target",
-                      x + 480, y3 + 56, size=11, col=theme.POOR)
+                      x + 480, y3 + V(56), size=11, col=theme.POOR)
 
     if self.sel_two:
-        br = widgets.Button((x + 244, y3 + 18, 108, 30), f"Rounds: {self.sel_rounds}")
+        br = widgets.Button((x + 244, y3 + V(18), 108, bh_mode), f"Rounds: {self.sel_rounds}")
         ts = "off" if not self.sel_turn_sec else f"{self.sel_turn_sec}s"
-        bt = widgets.Button((x + 360, y3 + 18, 116, 30), f"Turn: {ts}")
+        bt = widgets.Button((x + 360, y3 + V(18), 116, bh_mode), f"Turn: {ts}")
         self.buttons["rounds"] = br
         self.buttons["turn"]   = bt
         br.draw(sc); bt.draw(sc)
         widgets.label(sc, "P1 plays loops · P2 plays compartments · same polymer",
-                      x, y3 + 56, size=11, col=theme.TEXT_FAINT)
+                      x, y3 + V(56), size=11, col=theme.TEXT_FAINT)
 
     # ---- Action row: Start / Shuffle / How to play / Settings / Quit
-    y4  = y3 + 86
-    bs  = widgets.Button((x,       y4, 110, 38), "Start",       key="ENTER", size=14)
-    bsh = widgets.Button((x + 118, y4, 120, 38), "Shuffle seed",              size=13)
-    bh  = widgets.Button((x + 246, y4, 120, 38), "How to play", key="H",     size=13)
-    bset= widgets.Button((x + 374, y4, 100, 38), "Settings",                  size=13)
-    bq  = widgets.Button((x + 482, y4,  70, 38), "Quit",                      size=13)
+    y4  = y3 + V(86)
+    bh_act = V(38)
+    bs  = widgets.Button((x,       y4, 110, bh_act), "Start",       key="ENTER", size=14)
+    bsh = widgets.Button((x + 118, y4, 120, bh_act), "Shuffle seed",              size=13)
+    bh  = widgets.Button((x + 246, y4, 120, bh_act), "How to play", key="H",     size=13)
+    bset= widgets.Button((x + 374, y4, 100, bh_act), "Settings",                  size=13)
+    bq  = widgets.Button((x + 482, y4,  70, bh_act), "Quit",                      size=13)
     bs.active = True
     for k, b in (("start", bs), ("seed", bsh), ("help", bh),
                  ("settings", bset), ("quit", bq)):
         self.buttons[k] = b
         b.draw(sc)
-    widgets.label(sc, f"seed {self.sel_seed}", x + 560, y4 + 12,
+    widgets.label(sc, f"seed {self.sel_seed}", x + 560, y4 + V(12),
                   size=11, col=theme.TEXT_FAINT, mono=True)
 
     # ---- Second row: MiNI-Lab (left) + Manual (right), same baseline
-    y5   = y4 + 52
-    blab = widgets.Button((x, y5, 220, 40), "Chromatin MiNI-Lab",
+    y5   = y4 + V(52)
+    bh_lab = V(40)
+    blab = widgets.Button((x, y5, 220, bh_lab), "Chromatin MiNI-Lab",
                           size=14, accent=theme.ROYAL_RED)
-    bman = widgets.Button((x + 230, y5, 110, 40), "Manual",
+    bman = widgets.Button((x + 230, y5, 110, bh_lab), "Manual",
                           size=13, accent=(28, 110, 65))
     blab.active = True
     self.buttons["lab"]    = blab
     self.buttons["manual"] = bman
     blab.draw(sc); bman.draw(sc)
-    widgets.label(sc, "free-play sandbox — every force, every parameter, live",
-                  x, y5 + 44, size=10, col=theme.TEXT_FAINT)
+    widgets.label(sc, "every force · every parameter · live",
+                  x, y5 + bh_lab + V(4), size=10, col=theme.TEXT_FAINT)
     widgets.label(sc, "physics · equations · metrics",
-                  x + 230, y5 + 44, size=10, col=theme.TEXT_FAINT)
+                  x + 230, y5 + bh_lab + V(4), size=10, col=theme.TEXT_FAINT)
 
     # ---- Music strip (bottom-left)
+    # note glyph needs the mono font -- Quicksand has no music-note glyph
     m = self.music
     widgets.label(sc,
                   ("♪  " + m.title()) if m.has_music
                   else "♪  drop your piano .mp3 files into  music/",
-                  x, H - 54, size=12,
+                  x, H - 54, size=12, mono=True,
                   col=theme.TEXT_DIM if m.has_music else theme.TEXT_FAINT)
     if m.has_music:
-        widgets.label(sc, f"{len(m.tracks)} track(s)  ·  M mute  ·  N next",
+        widgets.label(sc, f"{len(m.tracks)} track(s)  ·  M play/mute  ·  N next",
                       x, H - 36, size=11, col=theme.TEXT_FAINT, mono=True)
 
 
@@ -315,7 +340,35 @@ def draw_settings(self, W, H):
     self.buttons["windowed"]   = bw
     self.buttons["fullscreen"] = bf
     bw.draw(sc); bf.draw(sc)
-    y += 96
+    y += 82
+
+    # --- Theme (light + dark)
+    widgets.eyebrow(sc, "theme  ·  3 dark, 2 light", x, y)
+    cur = self.settings["theme"]
+    for i, name in enumerate(theme.THEME_ORDER):
+        pal = theme.THEMES[name]
+        b = widgets.Button((x + i * 132, y + 22, 124, 32), f"Theme:{name}",
+                           label=pal["label"], size=13)
+        b.active = (cur == name)
+        self.buttons[f"theme_{name}"] = b
+        b.draw(sc)
+    y += 82
+
+    # --- Music (off by default -- explicit start only)
+    widgets.eyebrow(sc, "music", x, y)
+    if not self.music.has_music:
+        widgets.label(sc, "no tracks - drop .mp3 files in music/",
+                      x, y + 28, size=12, col=theme.TEXT_FAINT, mono=True)
+    else:
+        playing = self.music.is_playing()
+        label = "Pause music" if playing else ("Resume music" if self.music.started else "Play music")
+        bm = widgets.Button((x, y + 22, 160, 32), label, size=13)
+        bm.active = playing
+        self.buttons["music_toggle"] = bm
+        bm.draw(sc)
+        widgets.label(sc, self.music.title(), x + 176, y + 30,
+                      size=12, col=theme.TEXT_DIM, mono=True)
+    y += 82
 
     # --- Back
     bb = widgets.Button((x, y, 140, 40), "Back", key="ESC", size=15)
@@ -379,6 +432,7 @@ def draw_play(self, W, H):
                    s.poly.box, e1=None, t=time.time() - self.t0,
                    mouse=self.mouse)
     self.draw_view_hud(R["view"])
+    self.draw_view_controls(R["view"], self.view, "play")
 
     # ---- Heatmaps: in hard mode the target loses its loop-anchor overlay.
     if self._scale is None:
@@ -412,7 +466,13 @@ def draw_play(self, W, H):
                         s.e1_live, title="E1 yours")
 
     # ---- Colour ribbon (always visible -- shows the player's own colouring)
-    yr     = y + 42
+    # yr leaves a 18px gap below the 34px-tall E1 tracks (y+34 .. yr) so the
+    # "click a cell..." caption has room to sit between them instead of
+    # overlapping the E1-yours bars above it.
+    yr     = y + 52
+    widgets.label(sc, "click a cell to tie that loop",
+                  g2.x + g2.w, y + 36, size=9, col=theme.CYAN,
+                  mono=True, right=True)
     ribbon = pygame.Rect(g2.x, yr, g2.w, 14)
     self.rects["ribbon"] = ribbon
     rb = (self.ribbon_bin(self.mouse[0])
@@ -424,9 +484,6 @@ def draw_play(self, W, H):
     if not s.hard:
         widgets.label(sc, "green dots = target anchors",
                       g1.x, yr + 2, size=9, col=theme.GREEN, mono=True)
-    widgets.label(sc, "click a cell to tie that loop",
-                  g2.x + g2.w, yr - 16, size=9, col=theme.CYAN,
-                  mono=True, right=True)
 
     # ---- Metric table
     mt = pygame.Rect(R["right"].x, yr + 34, R["right"].w, 180)
@@ -552,7 +609,7 @@ def draw_header(self, W):
         b.draw(sc)
     if self.music.has_music:
         widgets.label(sc, "♪ " + self.music.title()[:28],
-                      bmeas_x - gap, int(30 * S),
+                      bmeas_x - gap, int(30 * S), mono=True,
                       size=10, col=theme.TEXT_FAINT, right=True)
 
 
@@ -570,11 +627,42 @@ def draw_footer(self, W, H):
         "COMPARTMENTS   click or drag the colour ribbon to paint  ·  or click "
         "a bead in 3D to flip it  ·  watch E1 follow"
     )
-    widgets.label(sc, hint, 16, r.y + 9, size=11, col=theme.TEXT_DIM)
-    widgets.label(sc,
-                  "drag polymer to move · drag space to orbit · wheel zoom · "
-                  "SPACE pause · F fast-forward · R reset view",
-                  W - 16, r.y + 9, size=11, col=theme.TEXT_FAINT, right=True)
+    controls = ("drag polymer to move · drag space to orbit · wheel zoom · "
+                "SPACE pause · F fast-forward · R reset view")
+    # These two hints share one row. On a narrow window (down to theme.MIN_W)
+    # they can be wider than the window combined -- step the font down until
+    # both fit side by side instead of letting them run into each other.
+    size = 11
+    while size > 8 and (theme.font(size).size(hint)[0]
+                         + theme.font(size).size(controls)[0] > W - 32):
+        size -= 1
+    widgets.label(sc, hint, 16, r.y + 9, size=size, col=theme.TEXT_DIM)
+    widgets.label(sc, controls, W - 16, r.y + 9,
+                  size=size, col=theme.TEXT_FAINT, right=True)
+
+
+def draw_view_controls(self, rect, view, key_prefix):
+    """Colour/Shape buttons pinned to the 3D viewport's top-right corner --
+    a mouse alternative to the T/G keys. `view` is whichever PolymerView
+    (self.view or self.lab_view) is showing in this viewport; `key_prefix`
+    keeps the two viewports' buttons from colliding in self.buttons."""
+    from . import beadcolor, chainshape
+    sc = self.screen
+    S  = getattr(theme, "FONT_SCALE", 1.0)
+    bw, bh, gap = int(100 * S), int(26 * S), int(6 * S)
+    x = rect.right - 10 - bw
+    y = rect.top + 10
+
+    bcol = widgets.Button((x, y, bw, bh),
+                          f"Colour: {beadcolor.SHORT_LABEL[view.color_mode]}",
+                          key="T", accent=theme.CYAN, size=11)
+    brep = widgets.Button((x, y + bh + gap, bw, bh),
+                          f"Shape: {chainshape.SHORT_LABEL[view.rep_mode]}",
+                          key="G", accent=theme.GREEN, size=11)
+    self.buttons[f"{key_prefix}_colour"] = bcol
+    self.buttons[f"{key_prefix}_shape"]  = brep
+    bcol.draw(sc)
+    brep.draw(sc)
 
 
 def draw_view_hud(self, rect):
@@ -607,7 +695,7 @@ def draw_view_hud(self, rect):
             (theme.COMP_A, "A · red · E1>0 · weak attraction"),
             (theme.COMP_B, "B · blue · E1<0 · strong attraction"),
             (theme.GREEN,  "loop bond · harmonic, non-consecutive")]):
-        pygame.draw.circle(sc, col, (rect.x + 18, ly + i * 16 + 5), 5)
+        theme.circle(sc, col, (rect.x + 18, ly + i * 16 + 5), 5)
         widgets.label(sc, txt, rect.x + 30, ly + i * 16 - 2,
                       size=10, col=theme.TEXT_FAINT)
     if s.paused:
@@ -689,39 +777,42 @@ def draw_help(self, W, H):
     veil = pygame.Surface((W, H), pygame.SRCALPHA)
     veil.fill((*theme.INK, 225))
     sc.blit(veil, (0, 0))
-    r = pygame.Rect(W // 2 - 430, H // 2 - 280, 860, 560)
+    r = pygame.Rect(W // 2 - 430, H // 2 - 310, 860, 620)
     widgets.panel(sc, r, fill=theme.PANEL)
     x = r.x + 34
     y = r.y + 26
     widgets.eyebrow(sc, "how to play", x, y, theme.CYAN)
-    widgets.label(sc, "You are given a Hi-C map. Build the polymer that makes it.",
+    widgets.label(sc, "You're handed a Hi-C map. Can you build the polymer that made it?",
                   x, y + 16, size=19, col=theme.TEXT, bold=True)
 
     blocks = [
         ("the map", theme.AMBER, [
             "Lower triangle: contact frequency. Upper triangle: O/E correlation.",
-            "Green dots mark the target's loop anchors. Bin numbers run along both edges.",
-            "The red/blue checkerboard is compartments. E1 is the first eigenvector",
-            "of the correlation matrix -- red above the line, blue below. Press V to switch view.",
+            "Green dots mark the target's loop anchors -- your treasure map. Bin numbers",
+            "run along both edges. The red/blue checkerboard is compartments: E1, the first",
+            "eigenvector of the correlation matrix, sits red above the line, blue below.",
+            "Press V to flip between views.",
         ]),
         ("your two moves", theme.GREEN, [
-            "LOOPS (L)  -- see a green dot at (i,j)? Click that same cell on YOUR map.",
-            "             It ties a harmonic bond between two non-consecutive beads and pulls",
-            "             the segment between them into a TAD. Anchors must be >= 3 apart.",
-            "             You can also click bead i then bead j directly in 3D.",
+            "LOOPS (L) -- spot a green dot at (i,j)? Click that same cell on YOUR map.",
+            "          It ties a bond between two non-consecutive beads and gently pulls",
+            "          the segment between them into a TAD. Anchors must sit >= 3 apart.",
+            "          (You can also click bead i, then bead j, straight in 3D.)",
             "COMPARTMENTS (C) -- paint the ribbon under your map, or click beads in 3D.",
-            "             Red A attracts A weakly; blue B attracts B strongly; A and B repel.",
-            "             Blue blocks collapse into a core and drive the checkerboard.",
+            "          Red (A) attracts red weakly; blue (B) attracts blue strongly; A and",
+            "          B repel. Watch the blue beads huddle up and the checkerboard emerge.",
         ]),
         ("the physics", theme.CYAN, [
-            "Overdamped Langevin. Stiff harmonic backbone, soft excluded volume (chains can",
-            "cross), Gaussian block-copolymer attraction, soft box walls. Your map is an",
-            "ensemble average over simulation time -- one structure is never a Hi-C map.",
+            "It's real overdamped Langevin dynamics under the hood: a springy backbone,",
+            "soft excluded volume (strands can gently pass through each other), a",
+            "block-copolymer attraction, and soft walls. Your map is an average over time --",
+            "one single shape is never a Hi-C map, so give it a moment to settle.",
         ]),
         ("scoring", theme.MAGENTA, [
-            "ENTER runs a long measurement and locks in a score. SCC is the headline number.",
-            "Versus: P1 only places loops and is scored on APA + anchor F1; P2 only paints",
-            "colours and is scored on E1 + checkerboard. Same polymer, different report cards.",
+            "Press ENTER to run a long measurement and lock in your score -- SCC is the",
+            "headline number. Versus: P1 places loops (scored on APA + anchor F1), P2",
+            "paints compartments (scored on E1 + checkerboard). Same polymer, two very",
+            "different report cards.",
         ]),
     ]
     y += 54
@@ -732,10 +823,16 @@ def draw_help(self, W, H):
                           size=12, col=theme.TEXT_DIM)
         y += 22 + len(lines) * 16 + 12
 
-    widgets.label(sc,
-                  "L loops   C compartments   V map view   SPACE pause   F fast-forward   "
-                  "R reset view   ENTER measure   M mute   N next track   ESC back",
-                  x, r.bottom - 34, size=11, col=theme.TEXT_FAINT, mono=True)
+    # three short lines, not one long one -- stays inside the panel even at
+    # the "large" font-size setting (box width doesn't scale with FONT_SCALE)
+    footer_lines = [
+        "L loops   C compartments   V map view   T colour mode   G 3D shape",
+        "SPACE pause   F fast-forward   R reset view   ENTER measure",
+        "M music / mute   N next track   ESC back",
+    ]
+    for i, ln in enumerate(footer_lines):
+        widgets.label(sc, ln, x, r.bottom - 62 + i * 18,
+                      size=11, col=theme.TEXT_FAINT, mono=True)
     widgets.label(sc, "H or ESC to close", r.right - 34, r.y + 26,
                   size=11, col=theme.TEXT_FAINT, right=True)
 
@@ -829,6 +926,7 @@ def draw_lab(self, W, H):
                              nan=0.0, posinf=lab.poly.box, neginf=-lab.poly.box)
     self.lab_view.draw(sc, R["view"], pos_safe, lab.poly.types, lab.poly.loops,
                        lab.poly.box, t=time.time() - self.t0, mouse=self.mouse)
+    self.draw_view_controls(R["view"], self.lab_view, "lab")
 
     # ---- Two heatmaps: contact frequency (Reds) + O/E correlation (coolwarm)
     self.hm_lab_a.layout(R["map_a"], lab.poly.n)
@@ -861,9 +959,14 @@ def draw_lab_panel(self, panel_rect):
     """Scrollable parameter panel for the MiNI-Lab.
 
     Layout (top to bottom, not scrolled):
-      - Bead count: eyebrow label + min/max hint + text field (always visible)
+      - Bead count: a slider, styled like every other parameter (always visible)
       - Stability warning (shown when dt·k_bond/γ > 0.5)
       - Grouped sliders, one per SimParams field (scrollable)
+
+    Sliders (bead count included) are built once and cached in
+    self.lab_sliders / self.lab_bead_slider -- rebuilt only when missing, not
+    every frame -- so drag state survives across frames and so we're not
+    re-allocating + re-rendering ~20 widgets on every single draw call.
     """
     sc  = self.screen
     lab = self.lab
@@ -872,30 +975,32 @@ def draw_lab_panel(self, panel_rect):
 
     x     = panel_rect.x + 16
     row_h = int(40 * S)
-    self.lab_sliders = {}
 
     # --- Bead count (pinned at top, not part of the scroll region)
     from .physics import N_MIN, N_MAX
     n = lab.poly.n
-    widgets.eyebrow(sc, f"beads: {n}", x, panel_rect.y + 14, theme.ROYAL_RED)
-    widgets.label(sc, f"min {N_MIN} · max {N_MAX}", x, panel_rect.y + 30,
-                  size=10, col=theme.TEXT_FAINT, mono=True)
-    if self.lab_bead_field is None or self.lab_bead_field.value != n:
-        self.lab_bead_field = widgets.TextField(
-            (panel_rect.right - 100, panel_rect.y + 6, 80, 30), n, N_MIN, N_MAX)
-    self.lab_bead_field.rect.topleft = (panel_rect.right - 100, panel_rect.y + 6)
-    self.lab_bead_field.draw(sc)
+    by = panel_rect.y + 14
+    br = pygame.Rect(x, by + int(14 * S), panel_rect.w - 32, int(8 * S))
+    if self.lab_bead_slider is None:
+        self.lab_bead_slider = widgets.Slider(br, "beads", n, N_MIN, N_MAX,
+                                               step=1, fmt="{:.0f}", integer=True)
+        self.lab_bead_slider.key = "_bead_count"
+    self.lab_bead_slider.rect = br
+    if not self.lab_bead_slider.dragging:
+        self.lab_bead_slider.value = n
+    self.lab_bead_slider.draw(sc)
 
     # --- Scrollable content starts here
-    y        = panel_rect.y + 14 + int(46 * S) - self.lab_scroll
+    y        = by + row_h - self.lab_scroll
     clip_top = y
 
     # Stability guardrail -- warns before things explode
+    # mono font: the warning sign and gamma aren't in the UI font
     ratio = lab.params.dt * lab.params.k_bond / lab.params.gamma
     if ratio > 0.5:
         widgets.label(sc,
-                      f"⚠ dt·k_bond/γ = {ratio:.2f} -- integrator may be unstable",
-                      x, y, size=11, col=theme.POOR, bold=True)
+                      f"⚠ dt·k_bond/γ = {ratio:.2f} -- unstable",
+                      x, y, size=11, col=theme.POOR, bold=True, mono=True)
         y += int(20 * S)
 
     # Parameter groups: Langevin / Backbone / Loops / EV / Compartments / Confinement
@@ -903,12 +1008,17 @@ def draw_lab_panel(self, panel_rect):
         widgets.eyebrow(sc, group_name, x, y, theme.TEXT_DIM)
         y += int(20 * S)
         for key, label, lo, hi, step, fmt, is_int in fields:
-            val = getattr(lab.params, key)
-            r   = pygame.Rect(x, y + int(14 * S), panel_rect.w - 32, int(8 * S))
-            sl  = widgets.Slider(r, label, val, lo, hi,
-                                 step=step, fmt=fmt, integer=is_int)
-            sl.key = key
-            self.lab_sliders[key] = sl
+            r  = pygame.Rect(x, y + int(14 * S), panel_rect.w - 32, int(8 * S))
+            sl = self.lab_sliders.get(key)
+            if sl is None:
+                sl = widgets.Slider(r, label, getattr(lab.params, key), lo, hi,
+                                     step=step, fmt=fmt, integer=is_int)
+                sl.key = key
+                self.lab_sliders[key] = sl
+            else:
+                sl.rect = r
+                if not sl.dragging:
+                    sl.value = getattr(lab.params, key)
             # Only draw rows that are actually visible inside the panel.
             if panel_rect.y <= y <= panel_rect.bottom:
                 sl.draw(sc)

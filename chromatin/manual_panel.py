@@ -95,16 +95,15 @@ def render_latex(expr: str, fontsize: int = 18,
         _eq_cache[key] = surf
         return surf
     
-# Colours specific to the manual
-_NAV_ACTIVE_BG  = (28, 52, 38)        # deep green tint for selected section
-_NAV_ACTIVE_COL = (88, 210, 140)       # bright green for active title text
-_NAV_COL        = (120, 150, 130)      # dim green for inactive titles
-_EQ_BG          = (18, 24, 36)        # very dark background behind equations
-_EQ_COL         = (180, 210, 255)      # pale blue for equation text
-_EQ_LABEL_COL   = (80, 100, 140)       # dim for the label
-_HEADING_COL    = (220, 235, 220)      # near-white with a green tint
-_SUBH_COL       = (140, 200, 160)      # soft green for subheadings
-_BULLET_DOT     = (88, 210, 140)       # green bullet dot
+# Colours specific to the manual -- functions, not constants, so they track
+# theme.set_theme() at draw time instead of freezing at import time.
+def _NAV_ACTIVE_COL(): return theme.GREEN           # loop-convention green, fixed
+def _EQ_BG():           return theme.PANEL_HI        # chip behind equations
+def _EQ_COL():          return theme.CYAN            # equation text accent
+def _EQ_LABEL_COL():   return theme.TEXT_FAINT
+def _HEADING_COL():    return theme.TEXT
+def _SUBH_COL():        return theme.GREEN
+def _BULLET_DOT():      return theme.GREEN
 
 
 def _wrap(text: str, font: pygame.font.Font, max_w: int) -> list[str]:
@@ -200,7 +199,7 @@ class ManualPanel:
 
         # Title bar
         title_f = theme.font(16, bold=True)
-        sc.blit(title_f.render("THE CHROMATIN GAME — Manual", True, _HEADING_COL),
+        sc.blit(title_f.render("THE CHROMATIN GAME — Manual", True, _HEADING_COL()),
                 (mx + self.PAD, my + self.PAD))
         sub_f = theme.font(10, mono=True)
         sc.blit(sub_f.render("click a section · scroll to read", True, theme.TEXT_FAINT),
@@ -240,31 +239,6 @@ class ManualPanel:
         self._draw_content(sc, cont_x, body_y, cont_w, body_h)
         return True
 
-    def _draw_nav(self, sc, x, y, h):
-        """Left column: section list."""
-        self._nav_rects = []
-        nav_f   = theme.font(12, bold=False)
-        icon_f  = theme.font(11, mono=True)
-        row_h   = 40
-        pad     = 8
-
-        for i, sec in enumerate(SECTIONS):
-            active = (i == self._section)
-            r = pygame.Rect(x - 6, y + i * row_h, self.NAV_W, row_h - 4)
-            self._nav_rects.append(r)
-
-            if active:
-                pygame.draw.rect(sc, _NAV_ACTIVE_BG, r, border_radius=6)
-                pygame.draw.rect(sc, _NAV_ACTIVE_COL, r, 1, border_radius=6)
-
-            icon_col  = _NAV_ACTIVE_COL if active else _NAV_COL
-            title_col = _NAV_ACTIVE_COL if active else _NAV_COL
-
-            sc.blit(icon_f.render(sec["icon"], True, icon_col),
-                    (x + pad, y + i * row_h + 6))
-            sc.blit(nav_f.render(sec["title"], True, title_col),
-                    (x + pad + 26, y + i * row_h + 8))
-
     def _draw_rich_line(self, sc, text: str, x: int, y: int,
                         body_f, w: int) -> int:
         """Draw a line of text that may contain inline $math$ segments.
@@ -281,7 +255,7 @@ class ManualPanel:
             if part.startswith('$') and part.endswith('$') and len(part) > 2:
                 expr = part[1:-1]
                 try:
-                    surf = render_latex(expr, fontsize=13, dpi=180)
+                    surf = render_latex(expr, fontsize=13, color=_EQ_COL(), dpi=180)
                     segments.append(('math', surf))
                     line_h = max(line_h, surf.get_height())
                 except Exception:
@@ -366,7 +340,7 @@ class ManualPanel:
             # Small filled circle with the icon letter inside
             cx = x + pad + 10
             cy_icon = y + i * row_h + (row_h - 4) // 2
-            pygame.draw.circle(sc, icon_col, (cx, cy_icon), 10)
+            theme.circle(sc, icon_col, (cx, cy_icon), 10)
             letter = sec["icon"]
             limg   = icon_f.render(letter, True, theme.INK)
             sc.blit(limg, (cx - limg.get_width() // 2,
@@ -403,17 +377,17 @@ class ManualPanel:
             bt = block["type"]
 
             if bt == "heading":
-                img = heading_f.render(block["text"], True, _HEADING_COL)
+                img = heading_f.render(block["text"], True, _HEADING_COL())
                 sc.blit(img, (x + IP, cy))
                 cy += img.get_height() + line_gap + 4
                 # Underline
-                pygame.draw.line(sc, _NAV_ACTIVE_COL,
+                pygame.draw.line(sc, _NAV_ACTIVE_COL(),
                                  (x + IP, cy - 3),
                                  (x + IP + img.get_width(), cy - 3), 1)
                 cy += 6
 
             elif bt == "subheading":
-                img = subh_f.render(block["text"], True, _SUBH_COL)
+                img = subh_f.render(block["text"], True, _SUBH_COL())
                 sc.blit(img, (x + IP, cy + 6))
                 cy += img.get_height() + line_gap + 8
 
@@ -437,7 +411,7 @@ class ManualPanel:
                 latex   = block.get("latex", block.get("text", ""))
                 lbl_txt = block.get("label", "")
                 try:
-                    eq_surf = render_latex(latex)
+                    eq_surf = render_latex(latex, color=_EQ_COL())
                     eq_w, eq_h_px = eq_surf.get_size()
 
                     # Box is exactly the equation surface size + small padding.
@@ -456,11 +430,11 @@ class ManualPanel:
                     lbl_img = None
                     if lbl_txt:
                         lbl_img = label_f.render(f"[{lbl_txt}]", True,
-                                                 _EQ_LABEL_COL)
+                                                 _EQ_LABEL_COL())
                         lbl_h = lbl_img.get_height() + 4
 
                     if y <= cy <= y + h:
-                        pygame.draw.rect(sc, _EQ_BG, box_r, border_radius=6)
+                        pygame.draw.rect(sc, _EQ_BG(), box_r, border_radius=6)
                         pygame.draw.rect(sc, theme.RULE_SOFT, box_r, 1,
                                          border_radius=6)
                         sc.blit(eq_surf, (box_r.x + pad_x, box_r.y + pad_y))
@@ -477,7 +451,7 @@ class ManualPanel:
                     eq_h_fb = len(lines) * (eq_f.get_height() + 2) + 16
                     eq_rect = pygame.Rect(x + IP, cy + 4, w - IP * 2, eq_h_fb)
                     if y <= cy <= y + h:
-                        pygame.draw.rect(sc, _EQ_BG, eq_rect, border_radius=6)
+                        pygame.draw.rect(sc, _EQ_BG(), eq_rect, border_radius=6)
                         ey = cy + 10
                         for ln in lines:
                             sc.blit(eq_f.render(ln, True, theme.POOR),
@@ -491,7 +465,7 @@ class ManualPanel:
                     eq_h_fb = len(lines) * (eq_f.get_height() + 2) + 16
                     eq_rect = pygame.Rect(x + IP, cy + 4, w - IP * 2, eq_h_fb)
                     if y <= cy <= y + h:
-                        pygame.draw.rect(sc, _EQ_BG, eq_rect, border_radius=6)
+                        pygame.draw.rect(sc, _EQ_BG(), eq_rect, border_radius=6)
                         ey = cy + 10
                         for ln in lines:
                             sc.blit(eq_f.render(ln, True, theme.POOR),
@@ -505,8 +479,8 @@ class ManualPanel:
                     for li, ln in enumerate(lines):
                         if y <= cy <= y + h:
                             if li == 0:
-                                pygame.draw.circle(sc, _BULLET_DOT,
-                                                   (x + IP + 6, cy + 8), 3)
+                                theme.circle(sc, _BULLET_DOT(),
+                                            (x + IP + 6, cy + 8), 3)
                             sc.blit(bullet_f.render(ln, True, theme.TEXT_DIM),
                                     (x + IP + 16, cy))
                         cy += bullet_f.get_height() + 2

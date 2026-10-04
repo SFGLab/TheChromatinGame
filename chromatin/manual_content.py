@@ -11,59 +11,63 @@ SECTIONS = [
         "blocks": [
             {"type": "heading", "text": "The Inverse Problem"},
             {"type": "body", "text":
-                "Most of physics runs forward: given the rules, predict "
-                "the outcome. Chromatin folding runs the other way — you "
-                "are handed the measurement and asked to recover the "
-                "structure that produced it. This is an inverse problem, "
-                "and they are notoriously hard."},
+                "Most of physics runs forward: you're given the rules, and you predict "
+                "the outcome. Chromatin folding hands you the puzzle backwards — you "
+                "get the measurement first, and your job is to recover the "
+                "structure that produced it. That's called an inverse problem, "
+                "and nature is not shy about making them hard. This whole game "
+                "is built around that one delightful difficulty."},
             {"type": "subheading", "text": "Macrostates and microstates"},
             {"type": "body", "text":
-                "A microstate is the full detailed description of a system "
-                "— every atom's position, every molecule's conformation. "
-                "A macrostate is what you can actually observe: a coarse, "
-                "averaged projection. Temperature is the macrostate of "
-                "molecular velocities; a Hi-C heatmap is the macrostate "
-                "of millions of individual chromatin fibres. "
-                "The forward direction micro → macro is usually easy. "
-                "The reverse is where the trouble begins, because many "
-                "different microstates can produce the same macrostate."},
+                "A microstate is the full, dizzying detail of a system — "
+                "every atom's position, every molecule's conformation. "
+                "A macrostate is the coarse, friendlier thing you can actually "
+                "observe. Temperature is the macrostate of jittery molecular "
+                "velocities; a Hi-C heatmap is the macrostate "
+                "of millions of individual chromatin fibres, all folded differently, "
+                "averaged into one picture. "
+                "Going from micro to macro is the easy direction — just add things up. "
+                "Going backwards is where it gets interesting, because many "
+                "different microstates can produce the exact same macrostate."},
             {"type": "subheading", "text": "Hi-C as an ensemble average"},
             {"type": "body", "text":
-                "Hi-C cross-links DNA, fragments it, and counts how often "
-                "pairs of loci end up ligated — a proxy for spatial "
-                "proximity. The contact matrix P, where P(i,j) is the "
+                "Hi-C cross-links DNA, snips it up, and counts how often "
+                "pairs of loci end up glued together — a clever proxy for "
+                "spatial proximity. The contact matrix P, where P(i,j) is the "
                 "probability that loci i and j were close in space, is "
-                "measured across millions of cells simultaneously. "
-                "The heatmap is therefore an ensemble average, not a "
-                "snapshot. Many different ensembles of structures can "
-                "produce the same heatmap. The problem has no unique "
-                "answer."},
+                "measured across millions of cells at once. "
+                "So the heatmap you see is an ensemble average, never a "
+                "single snapshot. Many different crowds of structures can "
+                "produce the same heatmap — which is part of why this is fun "
+                "rather than merely frustrating: there's room for more than "
+                "one right answer."},
             {"type": "subheading", "text": "Ill-posed by definition"},
             {"type": "body", "text":
                 "A well-posed problem (Hadamard, 1902) has a solution "
-                "that exists, is unique, and changes continuously with "
-                "the data. Inverse problems fail on all three counts. "
+                "that exists, is unique, and changes smoothly with "
+                "the data. Inverse problems love to break all three rules. "
                 "For chromatin: not every heatmap corresponds to a "
-                "realisable polymer; many polymers produce the same "
-                "heatmap; and small measurement errors can lead to "
-                "wildly different reconstructions. What we can do is "
+                "realisable polymer; many polymers can produce the same "
+                "heatmap; and small measurement errors can snowball into "
+                "wildly different reconstructions. What we *can* do is "
                 "constrain the problem with a physical model and ask "
                 "which parameters make the simulated map best match "
-                "the observed one — which is exactly what this game "
-                "asks you to do."},
+                "the observed one — which is exactly the game you're about "
+                "to play."},
             {"type": "subheading", "text": "Why we built this"},
             {"type": "body", "text":
-                "The chromatin field draws in physicists, biologists, "
-                "mathematicians, and computer scientists. Many people "
-                "working with Hi-C data have never seen a polymer "
-                "simulation; many polymer physicists have limited "
-                "intuition for what a contact map encodes biologically. "
-                "This game exists to build that intuition interactively. "
-                "Place loops, paint compartments, watch the heatmap "
-                "respond. The physics is real — the same models and "
-                "analysis pipeline used in the research literature. "
-                "The goal is not to solve the inverse problem, "
-                "but to feel why it is hard and why it matters."},
+                "The chromatin field is a happy mix of physicists, biologists, "
+                "mathematicians, and computer scientists, and they don't always "
+                "speak the same dialect. Plenty of people working with Hi-C data "
+                "have never watched a polymer simulation wiggle; plenty of polymer "
+                "physicists have never had to explain what a contact map means "
+                "biologically. This game exists to build that shared intuition, "
+                "hands-on and a little bit playfully. "
+                "Place loops, paint compartments, and watch the heatmap talk back. "
+                "The physics underneath is real — the same models and "
+                "analysis pipeline used in the actual research literature. "
+                "The goal was never to *solve* the inverse problem once and for all, "
+                "but to let you feel, in your own hands, why it's hard and why it matters."},
         ]
     },
     {
@@ -72,74 +76,78 @@ SECTIONS = [
         "blocks": [
             {"type": "heading", "text": "Chromatin as a Spatial Graph"},
             {"type": "body", "text":
-                "The chromatin fibre is modelled as a chain of N beads "
+                "Picture the chromatin fibre as a chain of N beads on a string, "
                 "connected by a backbone. Each bead i carries two "
-                "independent biological properties: a loop state "
-                "describing which long-range bonds it participates in, "
-                "and an epigenetic state sᵢ describing its local "
+                "independent personality traits: a loop state "
+                "describing which long-range bonds it's tangled up in, "
+                "and an epigenetic state s_i describing its local "
                 "chromatin chemistry. Together they define a spatial "
-                "graph whose 3D embedding produces the contact map."},
+                "graph, and the 3D shape that graph folds into is what "
+                "produces the contact map you're trying to match."},
             {"type": "subheading", "text": "Cohesin and loop extrusion"},
             {"type": "body", "text":
-                "Loops are long-range interactions mediated by cohesin, "
-                "a ring-shaped protein complex. Cohesin encircles the "
-                "chromatin fibre and acts like a molecular motor: it "
-                "extrudes a growing loop of DNA until it stalls at a "
-                "CTCF boundary element. The result is a stable loop "
-                "anchored at two genomic positions (mₖ, nₖ). "
-                "The full loop state ℒ of the polymer is the set "
-                "of all such pairs, where each anchor must be at "
-                "least 3 beads apart:"},
+                "Loops are long-range friendships mediated by cohesin, "
+                "a ring-shaped protein complex with a neat trick. Cohesin "
+                "encircles the chromatin fibre and acts like a tiny "
+                "molecular motor: it reels in a growing loop of DNA until it "
+                "stalls at a CTCF boundary element, like a drawstring "
+                "pulled tight and tied off. The result is a stable loop "
+                "anchored at two genomic positions (m_k, n_k). "
+                "The full loop state L of the polymer is just the set "
+                "of all such pairs, with each anchor pair required to "
+                "sit at least 3 beads apart:"},
             {"type": "equation",
              "latex": r"\mathcal{L} = \{(m_k, n_k) : 0 \leq m_k < n_k \leq N-1,\; n_k - m_k \geq 3\}",
              "label": "loop microstate"},
             {"type": "body", "text":
-                "Each pair (mₖ, nₖ) appears as a bright corner dot "
-                "in the Hi-C heatmap, surrounded by a square of "
-                "elevated contact frequency — the TAD."},
+                "Each pair (m_k, n_k) shows up as a bright corner dot "
+                "in the Hi-C heatmap, with a whole square of "
+                "elevated contact frequency gathered around it — that's your TAD."},
             {"type": "subheading", "text": "Epigenetic marks and compartments"},
             {"type": "body", "text":
-                "Every bead i carries an epigenetic state sᵢ ∈ {A, B}. "
-                "Epigenetic marks are chemical modifications to histones "
-                "that alter how tightly chromatin is packed and which "
-                "proteins are recruited. Active euchromatin (A, red) "
-                "is gene-rich, transcriptionally active, and associates "
-                "with nuclear pores. Inactive heterochromatin (B, blue) "
-                "is gene-poor, silenced, and clusters near the nuclear "
-                "lamina."},
+                "Every bead i also carries an epigenetic state s_i in {A, B} — "
+                "think of it as the bead's mood. Epigenetic marks are "
+                "chemical tags on histones that change how tightly chromatin is "
+                "packed and which proteins come to visit. Active euchromatin "
+                "(A, red) is gene-rich, busy transcribing, and likes to hang "
+                "out near nuclear pores. Inactive heterochromatin (B, blue) "
+                "is gene-poor, quiet, and prefers the nuclear "
+                "lamina, out near the edges."},
             {"type": "equation",
              "latex": r"s_i \in \{A,\, B\}, \quad i = 0, 1, \ldots, N-1",
              "label": "epigenetic microstate"},
             {"type": "body", "text":
-                "Chromatin segments in the same epigenetic state attract "
-                "each other because they recruit the same proteins — "
-                "a process analogous to liquid-liquid phase separation. "
+                "Chromatin segments sharing an epigenetic state attract "
+                "each other, because they recruit the same proteins — "
+                "a bit like guests clustering around the same snack table, "
+                "and not unlike liquid-liquid phase separation. "
                 "This is captured by a block-copolymer interaction "
-                "with well depths ε_AA, ε_BB, and ε_AB:"},
+                "with well depths eps_AA, eps_BB, and eps_AB:"},
             {"type": "equation",
              "latex": r"\varepsilon_{s_i s_j}: \quad \varepsilon_{AA} > 0,\quad \varepsilon_{BB} \gg \varepsilon_{AA},\quad \varepsilon_{AB} < 0",
              "label": "epigenetic interaction strengths"},
             {"type": "body", "text":
-                "The strong B-B attraction (ε_BB) collapses blue beads "
-                "into a dense core. The negative ε_AB encodes "
-                "Flory-Huggins incompatibility — A and B beads repel "
-                "each other, reinforcing phase separation. The "
-                "macroscopic result is the plaid checkerboard in Hi-C: "
-                "loci in the same compartment have elevated P(i,j), "
-                "loci of opposite type are depleted."},
+                "The strong B-B attraction (eps_BB) pulls blue beads "
+                "into a dense little core. The negative eps_AB is "
+                "Flory-Huggins incompatibility at work — A and B beads would "
+                "rather not touch, which sharpens the separation between phases. "
+                "The visible result is the plaid checkerboard in Hi-C: "
+                "loci sharing a compartment get elevated P(i,j), "
+                "loci of opposite type get the cold shoulder."},
             {"type": "subheading", "text": "The full microstate"},
             {"type": "body", "text":
-                "The complete description of the polymer at any instant "
-                "is the triplet of bead positions {rᵢ}, the loop "
-                "state ℒ, and the epigenetic state {sᵢ}:"},
+                "So the complete description of the polymer at any instant "
+                "is the triplet of bead positions {r_i}, the loop "
+                "state L, and the epigenetic state {s_i}:"},
             {"type": "equation",
              "latex": r"\Omega = (\{\mathbf{r}_i\}_{i=0}^{N-1},\;\mathcal{L},\;\{s_i\}_{i=0}^{N-1})",
              "label": "full polymer microstate"},
             {"type": "body", "text":
-                "The positions {rᵢ} evolve under Langevin dynamics. "
-                "The loop state ℒ and epigenetic state {sᵢ} are your "
-                "two moves — you set them, and the simulation explores "
-                "the conformational space consistent with your choices."},
+                "The positions {r_i} evolve under Langevin dynamics, "
+                "jostled by thermal noise. The loop state L and epigenetic "
+                "state {s_i} are your two moves — you set them, and the "
+                "simulation does the honest work of exploring every "
+                "conformation consistent with your choices."},
         ]
     },
     {
@@ -148,190 +156,194 @@ SECTIONS = [
         "blocks": [
             {"type": "heading", "text": "The Force Field"},
             {"type": "body", "text":
-                "A force field is a set of rules that assigns a potential "
-                "energy U to every possible configuration of the system. "
+                "A force field is simply a set of rules that assigns a potential "
+                "energy U to every possible arrangement of the system. "
                 "From Newton's second law, the force on each particle "
-                "is the negative gradient of that energy. "
-                "Where the energy landscape slopes downhill, the force "
-                "pushes the particle in that direction. Where the "
-                "landscape is flat, there is no force. The particle "
-                "always tends to roll toward lower energy, while "
-                "thermal fluctuations kick it around and allow it to "
-                "explore nearby configurations."},
+                "is the negative gradient of that energy — nature's way of "
+                "saying \"roll downhill.\" "
+                "Where the energy landscape slopes, the force "
+                "nudges the particle along. Where it's flat, nothing happens. "
+                "The particle always drifts toward lower energy, while "
+                "thermal fluctuations jiggle it around and let it "
+                "explore nearby configurations instead of getting stuck."},
             {"type": "body", "text":
                 "In classical molecular dynamics this gives Newton's "
-                "equation m·ẍ = −∇U. For a polymer in a viscous "
-                "environment like the cell nucleus, inertia is "
-                "negligible — the friction from the surrounding medium "
+                "equation, mass times acceleration equals minus the "
+                "gradient of U. But for a polymer in a thick, "
+                "viscous environment like the cell nucleus, inertia barely "
+                "matters — the friction from the surrounding medium "
                 "is so large that the particle forgets its velocity "
-                "almost instantly. The equation of motion simplifies "
-                "to the overdamped Langevin equation, where the "
-                "velocity (not the acceleration) is proportional to "
+                "almost instantly, like a marble dropped in honey. "
+                "The equation of motion simplifies "
+                "to the overdamped Langevin equation, where it's "
+                "velocity, not acceleration, that's proportional to "
                 "the force:"},
             {"type": "equation",
              "latex": r"\frac{d\mathbf{r}}{dt} = \frac{-\nabla U(\mathbf{r})}{\gamma} + \sqrt{\frac{2k_BT}{\gamma}}\;\boldsymbol{\xi}(t)",
              "label": "overdamped Langevin"},
             {"type": "body", "text":
-                "Here γ is the friction coefficient — it sets how "
+                "Here gamma is the friction coefficient — it sets how "
                 "quickly the system responds to forces. kT is thermal "
-                "energy and ξ(t) is Gaussian white noise representing "
-                "random collisions with the solvent. The key insight "
-                "is that the noise amplitude is not a free parameter: "
-                "it is fixed by γ and kT through the "
-                "fluctuation-dissipation theorem, ensuring the system "
-                "reaches the correct thermal equilibrium regardless "
-                "of how large γ is. Raising γ slows the dynamics "
-                "without changing which structures are stable."},
+                "energy, the gentle background hum of heat, and xi(t) is "
+                "Gaussian white noise standing in for the constant "
+                "random bombardment of solvent molecules. The elegant part "
+                "is that the noise amplitude isn't a free dial: "
+                "it's locked to gamma and kT by the "
+                "fluctuation-dissipation theorem, so the system always "
+                "settles at the correct thermal equilibrium no matter "
+                "how large gamma gets. Raising gamma just slows the dance down "
+                "without changing which structures are the stable ones."},
             {"type": "body", "text":
                 "The total potential energy U is a sum of six terms, "
-                "each capturing a different physical interaction. "
-                "We describe each one below — its mathematical form, "
-                "what it models biologically, and what happens when "
-                "you turn it up or down."},
+                "each one its own little physical story. "
+                "We'll walk through each below — its mathematical form, "
+                "what it represents biologically, and what happens when "
+                "you turn its dial up or down."},
 
             {"type": "subheading", "text": "1. Backbone bonds"},
             {"type": "body", "text":
-                "The most fundamental constraint: consecutive beads "
-                "must stay connected. The backbone bond is a harmonic "
-                "spring between bead i and bead i+1, with equilibrium "
-                "length b₀ = 1 and stiffness k_bond:"},
+                "The most basic rule in the whole game: consecutive beads "
+                "have to stay connected. The backbone bond is a harmonic "
+                "spring between bead i and bead i+1, with a preferred "
+                "length b_0 = 1 and stiffness k_bond:"},
             {"type": "equation",
              "latex": r"U_{\mathrm{bond}} = \frac{k_{\mathrm{bond}}}{2} \sum_{i=0}^{N-2} \left(|\mathbf{r}_{i+1}-\mathbf{r}_i| - b_0\right)^2",
              "label": "backbone"},
             {"type": "body", "text":
-                "This term is always attractive when bonds are "
-                "stretched and repulsive when compressed — it acts "
-                "like a rubber band with a preferred length. "
-                "The stiffness k_bond must be large enough that bonds "
-                "stay close to b₀ at all times, but not so large "
-                "that the timestep dt becomes unstable. "
-                "The stability condition is dt · k_bond / γ < 0.5. "
-                "Intuition: if you could remove all other forces, "
-                "the backbone alone would give you a freely-jointed "
-                "chain — a random walk in 3D."},
+                "It pulls back when stretched and pushes back when "
+                "squeezed — exactly like a rubber band with a favourite "
+                "length. k_bond needs to be stiff enough that bonds "
+                "stay close to b_0 at all times, but not so stiff "
+                "that the timestep dt goes unstable underneath it. "
+                "The safe zone is dt · k_bond / gamma < 0.5. "
+                "Intuition: strip away every other force, and the "
+                "backbone alone gives you a freely-jointed "
+                "chain — plain old random-walk spaghetti."},
 
             {"type": "subheading", "text": "2. Bending stiffness"},
             {"type": "body", "text":
-                "Real chromatin is not freely jointed — it has a "
+                "Real chromatin isn't loose spaghetti, either — it has a "
                 "persistence length of roughly 50 nm (about 150 bp), "
-                "meaning it resists bending on short length scales. "
-                "The Kratky-Porod bending term penalises sharp kinks "
-                "between consecutive bond vectors, where φᵢ is the "
+                "meaning it resists sharp bends over short stretches. "
+                "The Kratky-Porod bending term penalises kinks "
+                "between consecutive bond vectors, where phi_i is the "
                 "angle between bond (i, i+1) and bond (i+1, i+2):"},
             {"type": "equation",
              "latex": r"U_{\mathrm{bend}} = k_{\mathrm{angle}} \sum_{i=0}^{N-3} (1 - \cos\varphi_i)",
              "label": "Kratky-Porod bending"},
             {"type": "body", "text":
-                "When φ = 0 the chain is perfectly straight and "
-                "U_bend = 0. When φ = π the chain folds back on "
-                "itself and U_bend = 2·k_angle — the maximum penalty. "
-                "The persistence length in bead units is approximately "
-                "k_angle / kT. Larger k_angle gives a stiffer, "
-                "smoother chain that looks more like a real chromatin "
-                "fibre and less like a crumpled string. "
-                "Intuition: this is what makes the chain look like "
-                "a worm rather than a tangled mess."},
+                "When phi = 0 the chain runs perfectly straight and "
+                "U_bend = 0 — no complaints. When phi = pi it's folded "
+                "all the way back on itself, and U_bend = 2·k_angle, "
+                "the maximum penalty it can levy. The persistence length "
+                "in bead units works out to roughly k_angle / kT. A larger "
+                "k_angle gives you a stiffer, smoother chain that looks "
+                "more like a real chromatin fibre and less like a "
+                "crumpled receipt. "
+                "Intuition: this is the dial that decides whether your "
+                "chain reads as a calm worm or a tangled mess."},
 
             {"type": "subheading", "text": "3. Excluded volume"},
             {"type": "body", "text":
-                "Two beads cannot occupy the same point in space. "
-                "The excluded volume term is a soft-core repulsion "
+                "Two beads simply can't sit on top of each other. "
+                "The excluded volume term is a soft, polite repulsion "
                 "between all non-bonded bead pairs i and j with "
-                "|i−j| ≥ 2, active only when their distance r "
-                "is less than the exclusion diameter r_c:"},
+                "|i-j| >= 2, switching on only once their distance r "
+                "dips below the exclusion diameter r_c:"},
             {"type": "equation",
              "latex": r"U_{\mathrm{EV}}(r) = \varepsilon_{\mathrm{EV}}\!\left(1 - \frac{r}{r_c}\right)^{\!2}, \quad r < r_c",
              "label": "soft excluded volume"},
             {"type": "body", "text":
-                "The softness is intentional: beads can overlap "
-                "if the thermal energy is large enough, which means "
-                "the chain is not topologically constrained — strands "
-                "can pass through each other. This matches the biology "
-                "(topoisomerases actively resolve chromatin tangles "
-                "in the cell) and makes the simulation far faster "
-                "than a hard-core model would be. "
-                "Intuition: ε_EV controls how much beads push each "
-                "other apart. Too low and beads collapse into a "
-                "point; too high and the chain explodes. The sweet "
-                "spot gives a well-separated, self-avoiding-like "
-                "polymer where you can distinguish individual beads."},
+                "The softness is a deliberate choice: beads can still "
+                "overlap a little if thermal energy pushes hard enough, "
+                "which means the chain isn't topologically locked — "
+                "strands are free to slip through one another. That "
+                "matches real biology nicely (topoisomerases are busy "
+                "untangling chromatin in the cell all the time), and it "
+                "makes the simulation run far faster than a strict "
+                "hard-core model would. "
+                "Intuition: eps_EV controls how firmly beads shove each "
+                "other apart. Too low and everything collapses into a "
+                "point; too high and the chain flies apart. The sweet "
+                "spot gives a tidy, well-spaced, self-avoiding-looking "
+                "polymer where every bead gets its own personal space."},
 
             {"type": "subheading", "text": "4. Loop bonds"},
             {"type": "body", "text":
-                "Each loop you place adds a harmonic spring between "
-                "two non-consecutive beads (mₖ, nₖ) with |mₖ−nₖ| ≥ 3. "
-                "This mimics the mechanical effect of a cohesin "
-                "complex holding two distant genomic loci together:"},
+                "Every loop you place adds a harmonic spring between "
+                "two non-consecutive beads (m_k, n_k) with |m_k-n_k| >= 3 — "
+                "your hand-placed stand-in for a cohesin complex "
+                "clamping two distant genomic loci together:"},
             {"type": "equation",
              "latex": r"U_{\mathrm{loop}} = \frac{k_{\mathrm{loop}}}{2} \sum_{(m,n)\in\mathcal{L}} \left(|\mathbf{r}_m - \mathbf{r}_n| - b_0\right)^2",
              "label": "loop bonds"},
             {"type": "body", "text":
-                "The loop spring has the same equilibrium length b₀ "
+                "The loop spring shares the same equilibrium length b_0 "
                 "as the backbone, so it tries to bring anchors m and "
-                "n into direct contact. All beads between them are "
-                "pulled inward, forming a compact domain — the TAD. "
-                "In the contact map this appears as a bright square "
+                "n into direct contact. Everything in between gets "
+                "pulled along for the ride, forming a tidy domain — your TAD. "
+                "On the contact map this shows up as a bright square "
                 "on the diagonal, with a corner dot at (m, n) marking "
-                "the anchors. "
-                "Intuition: adding a loop is like pinching two points "
+                "the spot. "
+                "Intuition: placing a loop is like pinching two beads "
                 "of a necklace together — everything between them "
-                "loops out into a separate bubble."},
+                "loops out into its own little bubble."},
 
             {"type": "subheading", "text": "5. Block-copolymer attraction"},
             {"type": "body", "text":
-                "This is the compartmentalisation engine. A Gaussian "
-                "pairwise attraction acts between all non-bonded bead "
-                "pairs, with a well depth ε that depends on the "
-                "epigenetic types of the two beads:"},
+                "This is the engine behind compartmentalisation, the "
+                "big one. A Gaussian pairwise attraction acts between "
+                "all non-bonded bead pairs, with a well depth eps that "
+                "depends on the epigenetic types of the two beads involved:"},
             {"type": "equation",
              "latex": r"U_{\mathrm{cp}}(i,j) = -\varepsilon_{t_i t_j}\exp\!\left(-\frac{|\mathbf{r}_i-\mathbf{r}_j|^2}{2\sigma^2}\right)",
              "label": "block-copolymer"},
             {"type": "bullet", "items": [
-                "ε_BB  (B-B, strong)  →  blue beads collapse into a "
+                "eps_BB  (B-B, strong)  ->  blue beads huddle into a "
                 "dense heterochromatin core near the nuclear lamina",
-                "ε_AA  (A-A, weak)  →  red beads cluster loosely "
-                "in the interior, staying more open and accessible",
-                "ε_AB  (A-B, negative)  →  Flory-Huggins "
-                "incompatibility: mixed pairs are slightly repulsive, "
-                "sharpening the interface between phases",
-                "ε_domain  (inside a loop)  →  extra cohesion for "
-                "beads enclosed by a loop, reinforcing the TAD boundary",
+                "eps_AA  (A-A, weak)  ->  red beads cluster loosely "
+                "in the interior, staying open and easy to reach",
+                "eps_AB  (A-B, negative)  ->  Flory-Huggins "
+                "incompatibility: mixed pairs give each other a gentle "
+                "shove, sharpening the border between phases",
+                "eps_domain  (inside a loop)  ->  a little extra cohesion "
+                "for beads enclosed by a loop, reinforcing the TAD boundary",
             ]},
             {"type": "body", "text":
-                "The Gaussian form means the attraction has a natural "
-                "range σ: beads closer than σ feel a strong pull, "
-                "beads farther than 2σ or 3σ feel almost nothing. "
-                "The combination of strong B-B and negative A-B "
-                "drives liquid-liquid phase separation: a dense blue "
-                "core surrounded by a looser red shell. In the contact "
-                "map this produces the plaid checkerboard — the "
-                "hallmark of A/B compartmentalisation. "
-                "Intuition: this is the term you control with the "
-                "colour ribbon. Painting a bead blue makes it want "
-                "to join the B phase; painting it red pulls it toward "
-                "the A phase."},
+                "Being Gaussian, the attraction has a natural "
+                "range sigma: beads closer than sigma feel a strong tug, "
+                "beads farther than 2x or 3x that range barely notice each other. "
+                "Put strong B-B attraction together with repulsive A-B, "
+                "and you get liquid-liquid phase separation for free: a "
+                "dense blue core wrapped in a looser red shell. On the "
+                "contact map this produces the plaid checkerboard — the "
+                "unmistakable signature of A/B compartmentalisation. "
+                "Intuition: this is the force you're steering with the "
+                "colour ribbon. Paint a bead blue and it starts angling "
+                "toward the B phase; paint it red and it drifts back "
+                "toward A."},
 
             {"type": "subheading", "text": "6. Confinement"},
             {"type": "body", "text":
-                "The chain must stay inside the nucleus. Soft harmonic "
-                "walls confine each bead to a cube of half-side "
-                "L ∝ N^(1/3), so that bead density stays "
-                "N-independent as you change the chain length. "
-                "Only beads that venture outside the box feel a force; "
-                "inside the box the walls are invisible:"},
+                "The chain has to stay inside the nucleus — it can't just "
+                "wander off. Soft harmonic walls confine each bead to a "
+                "cube of half-side L ~ N^(1/3), keeping bead density "
+                "roughly constant no matter how long the chain gets. "
+                "Only beads that stray outside the box feel anything; "
+                "inside, the walls are completely invisible:"},
             {"type": "equation",
              "latex": r"U_{\mathrm{wall}} = \frac{k_w}{2} \sum_{\alpha \in \{x,y,z\}} \max(0,\,|x_\alpha|-L)^2",
              "label": "soft confinement"},
             {"type": "body", "text":
-                "The softness means a very energetic bead can briefly "
-                "escape — the same rationale as the soft excluded "
-                "volume. In practice beads rarely leave the box "
-                "at normal parameter values. "
-                "Intuition: the box is the nuclear envelope. "
-                "Removing it (k_w = 0 in the MiNI-Lab) lets the chain "
-                "expand freely into space, which makes compartment "
-                "formation much weaker because there is no confinement "
-                "pressure forcing the phases together."},
+                "Being soft, the walls let a very energetic bead make a "
+                "brief escape — the same forgiving spirit as the soft "
+                "excluded volume above. In practice beads rarely wander "
+                "outside the box at normal settings. "
+                "Intuition: think of the box as the nuclear envelope. "
+                "Switch it off (k_w = 0 in the MiNI-Lab) and the chain "
+                "drifts freely into open space, where compartment "
+                "formation gets noticeably weaker — there's no confining "
+                "pressure left to squeeze the phases together."},
         ]
     },
     {
@@ -340,226 +352,221 @@ SECTIONS = [
         "blocks": [
             {"type": "heading", "text": "Comparing Simulation to Experiment"},
             {"type": "body", "text":
-                "When you press Measure, the game runs the simulation "
-                "for a long time and averages the contact map over "
-                "hundreds of conformations. This ensemble average — "
-                "not any single snapshot — is what gets compared to "
+                "When you press Measure, the game lets the simulation "
+                "run for a good long while and averages the contact map "
+                "over hundreds of conformations. That ensemble average — "
+                "never any single snapshot — is what gets compared to "
                 "the experimental target. One structure is never a "
-                "Hi-C map; Hi-C is always a population average."},
+                "Hi-C map; Hi-C is always a population telling its story "
+                "together."},
             {"type": "body", "text":
-                "The comparison pipeline mirrors what real Hi-C "
-                "analysts do: normalise for distance decay, compute "
-                "the correlation structure, extract the compartment "
-                "eigenvector, and measure loop enrichment. Each step "
-                "peels away a different layer of the signal, and each "
-                "produces a score. The final score is a weighted sum "
-                "designed so that getting compartments right without "
-                "loops, or loops right without compartments, is "
-                "not enough — you need both."},
+                "The comparison pipeline mirrors exactly what real Hi-C "
+                "analysts do: normalise away the distance decay, work out "
+                "the correlation structure, pull out the compartment "
+                "eigenvector, and measure how enriched the loops are. "
+                "Each step peels back a different layer of the signal, "
+                "and each one earns its own score. The final score is a "
+                "weighted sum built so that nailing compartments while "
+                "ignoring loops, or the reverse, simply isn't "
+                "enough — you need both working together."},
 
             {"type": "subheading", "text": "Step 1 — Observed over expected (O/E)"},
             {"type": "body", "text":
-                "The raw contact map P has a strong distance decay: "
+                "The raw contact map P has one loud, boring feature: "
                 "nearby loci are always in contact simply because "
-                "they are close along the chain. This obscures the "
-                "interesting biology. The first step divides each "
-                "entry P(i,j) by the genome-distance-averaged mean "
-                "contact frequency at separation |i−j|:"},
+                "they're close along the chain. That distance decay drowns "
+                "out the interesting biology, so the first step divides "
+                "each entry P(i,j) by the genome-distance-averaged mean "
+                "contact frequency at separation |i-j|:"},
             {"type": "equation",
              "latex": r"OE_{ij} = \frac{P_{ij}}{\langle P_{|i-j|}\rangle}",
              "label": "O/E normalisation"},
             {"type": "body", "text":
                 "After O/E normalisation, a value of 1.0 means the "
-                "contact frequency is exactly what you would expect "
-                "by chance at that distance. Values above 1.0 signal "
-                "enrichment — two loci are closer than expected, "
-                "either because of a loop or because they share a "
-                "compartment. Values below 1.0 signal depletion — "
-                "loci that actively avoid each other across the "
-                "A/B boundary. "
+                "contact frequency is exactly what you'd expect "
+                "by chance at that distance — nothing to see here. Values "
+                "above 1.0 are the interesting bit: enrichment, two loci "
+                "sitting closer than chance would allow, either thanks to "
+                "a loop or a shared compartment. Values below 1.0 signal "
+                "depletion — loci actively keeping their distance across "
+                "an A/B boundary. "
                 "Intuition: O/E is the Hi-C equivalent of subtracting "
-                "the background. It is what makes the checkerboard "
-                "and the TAD squares visible."},
+                "the background noise. It's what finally makes the "
+                "checkerboard and the TAD squares pop into view."},
 
             {"type": "subheading", "text": "Step 2 — Pearson correlation matrix"},
             {"type": "body", "text":
-                "Once the distance decay is removed, the next step "
+                "With the distance decay out of the way, the next step "
                 "computes the Pearson correlation between every pair "
-                "of rows in the OE matrix. Two loci i and j get a "
-                "high correlation if they have similar contact "
-                "profiles — they interact with the same set of other "
-                "loci across the genome:"},
+                "of rows in the OE matrix. Two loci i and j score a "
+                "high correlation when their contact profiles look "
+                "alike — they're keeping company with the same crowd of "
+                "other loci across the genome:"},
             {"type": "equation",
              "latex": r"C_{ij} = \mathrm{corr}(OE_{i\cdot},\; OE_{j\cdot})",
              "label": "Pearson correlation matrix"},
             {"type": "body", "text":
-                "This is where the plaid pattern becomes striking. "
-                "Loci within the same A or B compartment have nearly "
-                "identical contact profiles — they all interact with "
-                "the same partners and avoid the same loci. So "
-                "C(i,j) is high when i and j are in the same "
-                "compartment, and negative when they are in different "
-                "ones. The resulting matrix looks like a chessboard "
+                "This is where the plaid pattern really starts to pop. "
+                "Loci sharing an A or B compartment end up with nearly "
+                "identical contact profiles — same friends, same "
+                "avoidances. So C(i,j) runs high when i and j share "
+                "a compartment, and dips negative when they don't. The "
+                "resulting matrix looks like a chessboard "
                 "of positive and negative squares — the compartment "
-                "structure laid bare. "
-                "Intuition: if OE removes the distance effect, the "
-                "correlation matrix removes the individual variation "
-                "and reveals the collective A/B structure."},
+                "structure laid bare for all to see. "
+                "Intuition: if O/E removes the distance effect, the "
+                "correlation matrix removes the individual noise "
+                "and reveals the collective A/B structure underneath."},
 
             {"type": "subheading", "text": "Step 3 — First eigenvector E1"},
             {"type": "body", "text":
-                "The dominant pattern in the correlation matrix C is "
-                "captured by its first eigenvector E1. This is a "
-                "single number per locus that summarises which "
-                "compartment it belongs to. Positive E1 values "
-                "correspond to A-type beads (red, active); negative "
-                "values to B-type beads (blue, inactive). "
-                "The sign is oriented using GC content in real data, "
-                "or bead type in the simulation."},
+                "The dominant pattern hiding in the correlation matrix C "
+                "is captured by its first eigenvector, E1 — a single "
+                "number per locus summing up which compartment it "
+                "belongs to. Positive E1 means an A-type bead (red, "
+                "active); negative means B-type (blue, inactive). "
+                "The sign gets anchored using GC content in real data, "
+                "or bead type here in the simulation."},
             {"type": "body", "text":
-                "E1 is the single most interpretable output of the "
+                "E1 is the single most readable output of the whole "
                 "Hi-C pipeline. When you look at the E1 track under "
-                "the heatmap, you are looking at the genome-wide "
+                "the heatmap, you're looking straight at the genome-wide "
                 "compartment landscape — the boundary between red and "
                 "blue is the boundary between euchromatin and "
-                "heterochromatin. Getting your E1 to match the target "
-                "E1 is the core challenge of the compartment move. "
-                "Intuition: E1 is the Hi-C equivalent of colouring "
-                "the genome — it tells you, for each locus, how "
-                "A-like or B-like its contact environment is."},
+                "heterochromatin. Matching your E1 to the target's E1 is "
+                "the heart of the compartment move. "
+                "Intuition: E1 is the Hi-C equivalent of colouring in "
+                "the genome by hand — it tells you, locus by locus, how "
+                "A-like or B-like its neighbourhood really is."},
 
             {"type": "subheading", "text": "Score 1 — Stratum-adjusted correlation (SCC)"},
             {"type": "body", "text":
-                "SCC is the headline score and the hardest to fool. "
-                "A naive Pearson correlation between the full "
+                "SCC is the headline score, and the one that's hardest "
+                "to fake. A naive Pearson correlation between the full "
                 "P_sim and P_exp matrices would be dominated by the "
-                "distance decay — two random polymers would score "
-                "well just by having the right diagonal structure. "
-                "SCC avoids this by computing correlations separately "
-                "at each genomic distance (stratum), then combining "
-                "them with weights proportional to the variance at "
-                "each stratum:"},
+                "distance decay alone — two completely random polymers "
+                "would score suspiciously well just by sharing the right "
+                "diagonal shape. SCC sidesteps this by computing "
+                "correlations separately at each genomic distance "
+                "(each stratum), then combining them with weights "
+                "proportional to the variance at each one:"},
             {"type": "equation",
              "latex": r"\mathrm{SCC} = \sum_s w_s\,\rho_s(P_{\mathrm{sim}},\,P_{\mathrm{exp}}),\quad w_s \propto \sqrt{\mathrm{var}_s(P_{\mathrm{sim}})\cdot\mathrm{var}_s(P_{\mathrm{exp}})}",
              "label": "SCC"},
             {"type": "body", "text":
-                "A stratum with high variance gets a large weight — "
-                "it is informationally rich and worth matching. "
-                "A stratum where both maps are nearly constant gets "
-                "a small weight — there is nothing to compare. "
-                "SCC ranges from -1 (perfectly anti-correlated) "
-                "to +1 (perfect match). In practice, a good polymer "
-                "model achieves SCC ~ 0.6-0.9 on real Hi-C data. "
-                "Intuition: SCC is asking whether the texture of "
+                "A stratum with high variance earns a big weight — "
+                "it's information-rich and worth getting right. "
+                "A stratum where both maps are nearly flat earns barely "
+                "any weight — there's nothing much to compare there anyway. "
+                "SCC ranges from -1 (perfectly backwards) "
+                "to +1 (a flawless match). In practice, a solid polymer "
+                "model lands around SCC ~ 0.6-0.9 on real Hi-C data, so "
+                "don't feel bad if you're not hitting 1.0. "
+                "Intuition: SCC asks whether the texture of "
                 "your map matches the texture of the target — at "
-                "every distance scale simultaneously."},
+                "every distance scale, all at once."},
 
             {"type": "subheading", "text": "Score 2 — E1 correlation"},
             {"type": "body", "text":
-                "Even if SCC is high, the compartment pattern could "
-                "still be wrong. E1 correlation directly checks "
-                "whether your eigenvector matches the target:"},
+                "Even a high SCC can hide a wrong compartment pattern "
+                "underneath. E1 correlation checks directly "
+                "whether your eigenvector matches the target's:"},
             {"type": "equation",
              "latex": r"r_{E1} = \mathrm{corr}(E1_{\mathrm{sim}},\; E1_{\mathrm{exp}})",
              "label": "compartment score"},
             {"type": "body", "text":
-                "r_E1 = +1 means your A/B pattern is a perfect match. "
-                "r_E1 = -1 means it is perfectly inverted — you have "
-                "the right block structure but every colour is wrong. "
-                "r_E1 ≈ 0 means your compartment landscape is "
-                "uncorrelated with the target. "
-                "Intuition: this is the score that responds directly "
-                "to the colour ribbon. Get the block boundaries right "
-                "and r_E1 rises quickly. Get them wrong and the "
-                "heatmap may still look plausible (it will still have "
-                "a checkerboard) but r_E1 will be low or negative."},
+                "r_E1 = +1 means a perfect A/B match. "
+                "r_E1 = -1 means you nailed the block structure but "
+                "swapped every colour — close, but inverted. "
+                "r_E1 ~ 0 means your compartment landscape has nothing "
+                "to do with the target's. "
+                "Intuition: this is the score that answers directly to "
+                "the colour ribbon. Get the block boundaries right and "
+                "r_E1 climbs fast. Get them wrong and the heatmap can "
+                "still look convincing (it'll still show a checkerboard) "
+                "while r_E1 quietly sits low, or even negative."},
 
             {"type": "subheading", "text": "Score 3 — Checkerboard correlation"},
             {"type": "body", "text":
-                "A complementary compartment score that works directly "
-                "on the correlation matrix C rather than its "
-                "eigenvector. It compares C_sim and C_exp on all "
-                "off-diagonal entries |i−j| > 1, capturing whether "
-                "the full plaid pattern — not just its dominant "
-                "component — is reproduced:"},
+                "A companion compartment score that works directly "
+                "on the correlation matrix C rather than squeezing it "
+                "down to one eigenvector. It compares C_sim and C_exp "
+                "on every off-diagonal entry |i-j| > 1, capturing the "
+                "whole plaid pattern — not just its headline component:"},
             {"type": "equation",
              "latex": r"r_{\mathrm{cb}} = \mathrm{corr}(C_{\mathrm{sim}}[\mathrm{off}],\; C_{\mathrm{exp}}[\mathrm{off}])",
              "label": "checkerboard"},
             {"type": "body", "text":
-                "This score is sensitive to fine compartment structure "
-                "that E1 alone might miss — sub-compartments, "
-                "gradients within an A or B domain, and the "
-                "sharpness of the A/B boundary. "
-                "Intuition: if r_E1 is the coarse-grained compartment "
-                "score, r_cb is the fine-grained one. Both need to "
-                "be high for full marks on the compartment side."},
+                "This score catches fine compartment structure that "
+                "E1 alone might miss — sub-compartments, gradients "
+                "within an A or B domain, how sharp the A/B boundary "
+                "really is. "
+                "Intuition: if r_E1 is the coarse read of compartments, "
+                "r_cb is the fine print. You'll want both running high "
+                "for full marks on the compartment side."},
 
             {"type": "subheading", "text": "Score 4 — Aggregate peak analysis (APA)"},
             {"type": "body", "text":
-                "APA measures loop enrichment. For each loop anchor "
-                "pair (m, n) in the target, a small sub-matrix of "
-                "P is extracted centred on (m, n) and all these "
-                "sub-matrices are averaged. A correct loop produces "
-                "a bright pixel at the centre surrounded by a "
+                "APA measures loop enrichment directly. For each loop "
+                "anchor pair (m, n) in the target, a small sub-matrix of "
+                "P is cut out around (m, n), and all these little "
+                "windows are averaged together. A real loop produces "
+                "a bright pixel right at the centre, framed by a "
                 "dimmer background:"},
             {"type": "equation",
              "latex": r"\mathrm{APA} = \frac{P_{\mathrm{centre}}}{\langle P_{\mathrm{background}}\rangle}",
              "label": "loop enrichment"},
             {"type": "body", "text":
-                "APA > 1 means there is loop enrichment — your "
-                "polymer is being brought into contact at the right "
-                "positions. APA ≈ 1 means no enrichment — the "
-                "contacts at loop positions are no different from "
-                "background. "
-                "Intuition: APA is the score that rewards you for "
-                "clicking the right cells in the heatmap. It does "
-                "not care where exactly your loops are — only whether "
-                "the positions that should be enriched in the target "
-                "are also enriched in your simulation."},
+                "APA > 1 means genuine loop enrichment — your "
+                "polymer is being pulled into contact exactly where it "
+                "should be. APA ~ 1 means no enrichment at all — the "
+                "contacts at loop positions look no different from "
+                "background noise. "
+                "Intuition: APA rewards you for clicking the right "
+                "cells on the heatmap. It doesn't care about your other "
+                "loops — only whether the spots that should light up in "
+                "the target are also lighting up in your simulation."},
 
             {"type": "subheading", "text": "Score 5 — Anchor F1"},
             {"type": "body", "text":
-                "APA tells you about enrichment at target positions, "
-                "but it does not penalise spurious loops — loops "
-                "placed in completely wrong positions. Anchor F1 "
-                "checks placement accuracy directly, comparing your "
-                "loop anchors to the true anchors within ±1 bead "
-                "tolerance:"},
+                "APA tells you about enrichment at the target's "
+                "positions, but it won't punish stray loops placed "
+                "somewhere completely wrong. Anchor F1 checks placement "
+                "accuracy head-on, comparing your loop anchors to the "
+                "true anchors within ±1 bead of tolerance:"},
             {"type": "equation",
              "latex": r"F_1 = \frac{2\,\cdot\,\mathrm{precision}\,\cdot\,\mathrm{recall}}{\mathrm{precision}+\mathrm{recall}}",
              "label": "anchor placement accuracy"},
             {"type": "body", "text":
                 "Precision is the fraction of your loops that land "
                 "near a true anchor. Recall is the fraction of true "
-                "anchors that you have covered. F1 is the harmonic "
-                "mean — it is only high if both precision and recall "
-                "are high. Placing 50 correct loops and 50 wrong ones "
-                "gives a low precision; placing 2 correct loops out "
-                "of 10 gives a low recall. "
-                "Intuition: F1 is the score that punishes both over- "
-                "and under-placement. It is why scattering loops "
-                "randomly across the heatmap does not work — you need "
-                "to read the green dots carefully and place loops "
-                "precisely."},
+                "anchors you actually managed to cover. F1 is their "
+                "harmonic mean, so it only climbs when both precision "
+                "and recall do. Scatter 50 correct loops among 50 wrong "
+                "ones and precision tanks; find only 2 of the 10 true "
+                "anchors and recall tanks instead. "
+                "Intuition: F1 punishes both scattering loops everywhere "
+                "and being too timid to place enough. Read the green "
+                "dots carefully, and place with intent."},
 
             {"type": "subheading", "text": "The total score"},
             {"type": "body", "text":
-                "All five scores are combined into a single weighted "
-                "sum, normalised to a 0-100 scale. The weights are "
-                "chosen so that compartments and loops contribute "
-                "roughly equally — neither can be ignored:"},
+                "All five scores combine into one weighted "
+                "sum, scaled to run from 0 to 100. The weights are "
+                "chosen so compartments and loops pull roughly equal "
+                "weight — you can't coast by ignoring either one:"},
             {"type": "equation",
              "latex": r"\mathrm{Score} = w_1\cdot\mathrm{SCC} + w_2\cdot r_{E1} + w_3\cdot r_{\mathrm{cb}} + w_4\cdot\mathrm{APA} + w_5\cdot F_1",
              "label": "weighted total (0-100)"},
             {"type": "body", "text":
-                "In two-player mode the scores split: the loop player "
-                "is scored on APA and F1 only; the compartment player "
-                "on r_E1 and r_cb only. This makes the competition "
-                "genuinely orthogonal — a perfect loop configuration "
-                "with random colours scores high for loops and near "
-                "zero for compartments, and vice versa. The two "
-                "mechanisms are independent in the biology and "
-                "independent in the scoring."},
+                "In two-player mode the scores go their separate ways: "
+                "the loop player is scored only on APA and F1; the "
+                "compartment player only on r_E1 and r_cb. That keeps "
+                "the competition genuinely independent — a perfect loop "
+                "layout with random colours scores well on loops and "
+                "near zero on compartments, and vice versa. The two "
+                "mechanisms are separate in the biology, and they stay "
+                "separate in the scoring too."},
         ]
     },
     {
@@ -569,64 +576,63 @@ SECTIONS = [
             {"type": "heading", "text": "Live Structural Metrics"},
             {"type": "body", "text":
                 "The analysis panel tracks six quantities in real time "
-                "as the simulation runs. They are computed directly "
-                "from the bead positions — no contact map needed — "
-                "and update every few frames. Together they give you "
-                "an instant physical picture of what the polymer is "
-                "doing, independent of how well it matches the target. "
-                "Think of them as the polymer's vital signs."},
+                "as the simulation runs, computed straight from the bead "
+                "positions — no contact map required — and refreshed "
+                "every few frames. Together they give you an instant "
+                "physical read on what the polymer is actually doing, "
+                "independent of how well it matches the target. "
+                "Think of them as the polymer's vital signs on a monitor."},
 
             {"type": "subheading", "text": "Radius of gyration  Rg"},
             {"type": "equation",
              "latex": r"R_g = \sqrt{\frac{1}{N}\sum_i |\mathbf{r}_i - \bar{\mathbf{r}}|^2}",
              "label": "compactness"},
             {"type": "body", "text":
-                "Rg is the RMS distance of all beads from the chain's "
-                "centre of mass. It is the single most informative "
-                "structural number: small Rg means the chain is "
-                "compact and globular (attractions dominate), large "
-                "Rg means it is open and extended (excluded volume "
-                "or backbone stiffness dominates). "
+                "Rg is the RMS distance of every bead from the chain's "
+                "centre of mass — arguably the single most useful "
+                "number on the panel. Small Rg means a compact, globular "
+                "chain (attractions are winning); large Rg means an open, "
+                "stretched-out one (excluded volume or backbone stiffness "
+                "is winning instead). "
                 "At thermal equilibrium, polymer theory predicts "
-                "Rg ~ N^ν, where ν ≈ 1/3 for a collapsed globule "
-                "and ν ≈ 3/5 for a self-avoiding swollen coil. "
-                "Watch Rg fall when you paint more B beads — the "
-                "strong B-B attraction collapses the chain — and "
-                "rise when you increase the excluded volume diameter."},
+                "Rg ~ N^nu, with nu ~ 1/3 for a collapsed globule "
+                "and nu ~ 3/5 for a swollen, self-avoiding coil. "
+                "Watch Rg drop as you paint on more B beads — the "
+                "strong B-B attraction reels the chain in — and "
+                "climb again as you raise the excluded volume diameter."},
 
             {"type": "subheading", "text": "End-to-end distance  R_ee"},
             {"type": "equation",
              "latex": r"R_{ee} = |\mathbf{r}_{N-1} - \mathbf{r}_0|",
              "label": "chain extent"},
             {"type": "body", "text":
-                "The straight-line distance between the first and "
-                "last bead. For a freely jointed ideal chain, "
-                "R_ee² = N · b₀² on average. In the presence of "
-                "loops and attractions, R_ee can be far smaller — "
-                "a loop between bead 0 and bead N-1 would collapse "
-                "it almost to zero. Unlike Rg, R_ee fluctuates "
-                "strongly from frame to frame as the chain ends "
-                "wander, so the time-series plot is noisier than "
-                "the others. Watch for its mean value and trend "
-                "rather than individual spikes."},
+                "Simply the straight-line distance between the very "
+                "first and very last bead. For a freely jointed ideal "
+                "chain, R_ee^2 = N · b_0² on average. Add loops and "
+                "attractions, and R_ee can shrink dramatically — a loop "
+                "tying bead 0 to bead N-1 would pull it almost to zero. "
+                "Unlike Rg, R_ee jitters around quite a bit frame to "
+                "frame as the two ends wander, so its time-series plot "
+                "will look noisier than the others. Watch its overall "
+                "trend, not every little spike."},
 
-            {"type": "subheading", "text": "Mean bond length  ⟨b⟩"},
+            {"type": "subheading", "text": "Mean bond length <b>"},
             {"type": "equation",
              "latex": r"\langle b \rangle = \frac{1}{N-1}\sum_i |\mathbf{r}_{i+1}-\mathbf{r}_i|",
              "label": "integrator health"},
             {"type": "body", "text":
-                "The average length of all backbone bonds. This should "
-                "stay very close to the equilibrium value b₀ = 1 at "
-                "all times. It is the first thing to check when the "
-                "simulation looks wrong: if ⟨b⟩ drifts upward beyond "
-                "about 1.2, the integrator is becoming unstable — "
-                "forces are so large that each step overshoots. "
-                "The fix is always to lower dt, raise γ, or lower "
-                "k_bond until dt · k_bond / γ < 0.5. "
-                "Intuition: a stable simulation has bonds that "
-                "oscillate tightly around b₀. An unstable one has "
-                "bonds that stretch further and further until the "
-                "positions become NaN and the simulation dies."},
+                "The average length across every backbone bond. It "
+                "should hover close to the equilibrium value b_0 = 1 at "
+                "all times — this is the first gauge to check if the "
+                "simulation starts looking off. If <b> drifts past "
+                "about 1.2, the integrator is coming unglued — "
+                "forces have grown so large each step is overshooting. "
+                "The fix is always the same trio: lower dt, raise gamma, or "
+                "lower k_bond, until dt · k_bond / gamma < 0.5 again. "
+                "Intuition: a healthy simulation has bonds that "
+                "wobble gently around b_0. An unstable one has "
+                "bonds stretching further and further until positions "
+                "turn to NaN and the simulation quietly gives up."},
 
             {"type": "subheading", "text": "Contact count  Nc"},
             {"type": "equation",
@@ -634,55 +640,54 @@ SECTIONS = [
              "label": "crowding"},
             {"type": "body", "text":
                 "The number of non-bonded bead pairs whose sigmoid "
-                "contact probability exceeds 0.5 — a clean binary "
-                "measure of how crowded the chain is. An extended "
-                "chain has O(N) contacts (mostly between neighbours); "
-                "a collapsed globule has O(N²) because every bead "
-                "is near every other. "
-                "Nc rises quickly when you add B beads or increase "
-                "the copolymer attraction, and falls when you raise "
-                "the excluded volume height. It is the most direct "
-                "measure of how 3D-compact the chain is at any "
-                "given moment — more direct than Rg for detecting "
-                "sudden collapse events."},
+                "contact probability crosses 0.5 — a clean, binary "
+                "reading of how crowded the chain has gotten. An "
+                "extended chain has O(N) contacts (mostly between "
+                "neighbours); a collapsed globule racks up O(N²), since "
+                "nearly every bead ends up near every other. "
+                "Nc climbs quickly as you add B beads or crank up the "
+                "copolymer attraction, and falls as you raise the "
+                "excluded volume height. It's the most direct way to "
+                "catch a sudden collapse in the act — more immediate "
+                "than Rg for spotting it the moment it happens."},
 
-            {"type": "subheading", "text": "Asphericity  δ"},
+            {"type": "subheading", "text": "Asphericity (delta)"},
             {"type": "equation",
              "latex": r"\delta = \frac{(\lambda_1-\lambda_2)^2+(\lambda_2-\lambda_3)^2+(\lambda_1-\lambda_3)^2}{2(\lambda_1+\lambda_2+\lambda_3)^2}",
              "label": "shape  [0 = sphere,  1 = rod]"},
             {"type": "body", "text":
-                "Asphericity measures how far the chain's shape "
-                "departs from a perfect sphere, using the three "
-                "eigenvalues λ₁ ≤ λ₂ ≤ λ₃ of the 3×3 gyration "
-                "tensor — the polymer equivalent of the inertia "
-                "tensor. If all three eigenvalues are equal the "
-                "cloud of beads is spherically symmetric and δ = 0. "
-                "If all mass is along one axis (a rod), δ = 1. "
-                "A typical looped and compartmentalised chromatin "
-                "model sits around δ = 0.3-0.5 — not quite a sphere, "
-                "not quite a rod, more like a flattened ellipsoid. "
-                "High δ values appear when long loops stretch the "
-                "chain along one axis, or when stiff backbone "
-                "dominates and the chain has not yet equilibrated."},
+                "Asphericity measures how far the chain's overall shape "
+                "strays from a perfect sphere, using the three "
+                "eigenvalues lambda_1 <= lambda_2 <= lambda_3 of the 3×3 gyration "
+                "tensor — the polymer's own version of the inertia "
+                "tensor. Equal eigenvalues mean a spherically symmetric "
+                "cloud of beads and delta = 0. All the mass strung out "
+                "along one axis, like a rod, and delta = 1. "
+                "A typical looped, compartmentalised chromatin "
+                "model lands around delta = 0.3-0.5 — not quite a sphere, "
+                "not quite a rod, more of a gently flattened ellipsoid. "
+                "High delta tends to show up when long loops stretch the "
+                "chain along one direction, or when a stiff backbone "
+                "dominates before the chain has had time to settle."},
 
-            {"type": "subheading", "text": "Compaction index  κ"},
+            {"type": "subheading", "text": "Compaction index (kappa)"},
             {"type": "equation",
              "latex": r"\kappa = \frac{R_g}{R_g^{\mathrm{ideal}}}, \qquad R_g^{\mathrm{ideal}} = b_0\sqrt{N/6}",
              "label": "vs ideal Gaussian chain"},
             {"type": "body", "text":
-                "Compaction index κ puts Rg in context by comparing "
-                "it to what a Gaussian (ideal, non-interacting) chain "
-                "of the same length would give. κ = 1 means the "
-                "chain is exactly as extended as an ideal random "
-                "walk. κ < 1 means it is more compact — attractive "
-                "interactions are winning. κ > 1 means it is more "
-                "swollen — excluded volume or backbone stiffness are "
-                "winning. For biological chromatin at the scale of "
-                "this game, κ typically sits around 0.3-0.7. "
-                "Watching κ over time tells you immediately whether "
-                "a parameter change is collapsing the chain (κ falls) "
-                "or expanding it (κ rises), without needing to know "
-                "the absolute scale of the system."},
+                "The compaction index kappa puts Rg into perspective by "
+                "comparing it to what a Gaussian (ideal, non-interacting) "
+                "chain of the same length would give. kappa = 1 means your "
+                "chain is exactly as spread out as an ideal random "
+                "walk — no better, no worse. kappa < 1 means it's more "
+                "compact, with attractions calling the shots. kappa > 1 "
+                "means it's more swollen, with excluded volume or "
+                "backbone stiffness in charge instead. For biological "
+                "chromatin at the scale this game plays with, kappa usually "
+                "sits around 0.3-0.7. "
+                "Watching kappa over time is a quick, scale-free way to tell "
+                "whether a parameter change is collapsing the chain "
+                "(kappa falls) or opening it back up (kappa rises)."},
         ]
     },
 ]

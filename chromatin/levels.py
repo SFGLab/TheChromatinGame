@@ -11,7 +11,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import analysis as an
-from .physics import A_TYPE, B_TYPE, Polymer, SimParams, simulate_ensemble
+from .physics import A_TYPE, B_TYPE, SimParams, simulate_ensemble
+from .physics_jax import FastPolymer   # same engine as the live game -- see physics_jax.py
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache")
 
@@ -126,7 +127,7 @@ def build_target(level: Level, seed: int, progress=None) -> Target:
 
     rng = np.random.default_rng(seed)
     types, loops = _ground_truth(level, rng)
-    poly = Polymer(level.n, SimParams(), seed=seed + 1000)
+    poly = FastPolymer(level.n, SimParams(), seed=seed + 1000)
     poly.load_config(types, loops)
     P = simulate_ensemble(poly, level.burn_in, level.n_samples, level.sample_every, progress)
     oe, C, e1 = an.pipeline(P, types.astype(float))

@@ -1,6 +1,7 @@
 {
   "volume": 1.0,
-  "font_mode": "large",
-  "resolution": 1,
-  "fullscreen": false
+  "font_mode": "small",
+  "resolution": 0,
+  "fullscreen": false,
+  "theme": "midnight"
 }
