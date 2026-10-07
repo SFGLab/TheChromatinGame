@@ -958,10 +958,10 @@ def draw_lab(self, W, H):
 def draw_lab_panel(self, panel_rect):
     """Scrollable parameter panel for the MiNI-Lab.
 
-    Layout (top to bottom, not scrolled):
-      - Bead count: a slider, styled like every other parameter (always visible)
+    Layout (top to bottom, all scrolled together):
+      - Bead count: a slider, styled and scrolling like every other parameter
       - Stability warning (shown when dt·k_bond/γ > 0.5)
-      - Grouped sliders, one per SimParams field (scrollable)
+      - Grouped sliders, one per SimParams field
 
     Sliders (bead count included) are built once and cached in
     self.lab_sliders / self.lab_bead_slider -- rebuilt only when missing, not
@@ -976,11 +976,27 @@ def draw_lab_panel(self, panel_rect):
     x     = panel_rect.x + 16
     row_h = int(40 * S)
 
-    # --- Bead count (pinned at top, not part of the scroll region)
+    # Clip everything scrollable to the inside of the panel box (inset by 1px
+    # so the border stroke itself stays untouched) -- a slider's label sits
+    # ~17px *above* its row's nominal y and its handle can poke a few px
+    # below, so without a real clip rect that overflow render past the top/
+    # bottom edge instead of being cut off cleanly as the panel scrolls.
+    prev_clip = sc.get_clip()
+    sc.set_clip(panel_rect.inflate(-2, -2))
+
+    # --- Scrollable content starts here (bead count is the first row)
+    y        = panel_rect.y + 14 - self.lab_scroll
+    clip_top = y
+
+    # Generous margin: let rows just outside the box still run through
+    # draw()/layout so the clip rect above -- not this coarse check -- is
+    # what decides the visible edge. This is purely a draw-call skip for
+    # rows that are nowhere near visible.
+    vis_lo, vis_hi = panel_rect.y - row_h, panel_rect.bottom + row_h
+
     from .physics import N_MIN, N_MAX
-    n = lab.poly.n
-    by = panel_rect.y + 14
-    br = pygame.Rect(x, by + int(14 * S), panel_rect.w - 32, int(8 * S))
+    n  = lab.poly.n
+    br = pygame.Rect(x, y + int(14 * S), panel_rect.w - 32, int(8 * S))
     if self.lab_bead_slider is None:
         self.lab_bead_slider = widgets.Slider(br, "beads", n, N_MIN, N_MAX,
                                                step=1, fmt="{:.0f}", integer=True)
@@ -988,24 +1004,24 @@ def draw_lab_panel(self, panel_rect):
     self.lab_bead_slider.rect = br
     if not self.lab_bead_slider.dragging:
         self.lab_bead_slider.value = n
-    self.lab_bead_slider.draw(sc)
-
-    # --- Scrollable content starts here
-    y        = by + row_h - self.lab_scroll
-    clip_top = y
+    if vis_lo <= y <= vis_hi:
+        self.lab_bead_slider.draw(sc)
+    y += row_h
 
     # Stability guardrail -- warns before things explode
     # mono font: the warning sign and gamma aren't in the UI font
     ratio = lab.params.dt * lab.params.k_bond / lab.params.gamma
-    if ratio > 0.5:
+    if ratio > 0.5 and vis_lo <= y <= vis_hi:
         widgets.label(sc,
                       f"⚠ dt·k_bond/γ = {ratio:.2f} -- unstable",
                       x, y, size=11, col=theme.POOR, bold=True, mono=True)
+    if ratio > 0.5:
         y += int(20 * S)
 
     # Parameter groups: Langevin / Backbone / Loops / EV / Compartments / Confinement
     for group_name, fields in LAB_PARAM_GROUPS:
-        widgets.eyebrow(sc, group_name, x, y, theme.TEXT_DIM)
+        if vis_lo <= y <= vis_hi:
+            widgets.eyebrow(sc, group_name, x, y, theme.TEXT_DIM)
         y += int(20 * S)
         for key, label, lo, hi, step, fmt, is_int in fields:
             r  = pygame.Rect(x, y + int(14 * S), panel_rect.w - 32, int(8 * S))
@@ -1019,11 +1035,14 @@ def draw_lab_panel(self, panel_rect):
                 sl.rect = r
                 if not sl.dragging:
                     sl.value = getattr(lab.params, key)
-            # Only draw rows that are actually visible inside the panel.
-            if panel_rect.y <= y <= panel_rect.bottom:
+            # Only draw rows that are anywhere near visible -- the clip rect
+            # set above handles the precise edge, this just skips far-off rows.
+            if vis_lo <= y <= vis_hi:
                 sl.draw(sc)
             y += row_h
         y += int(10 * S)
 
     # Track total content height so the scroll handler knows the limit.
     self._lab_panel_content_h = y - clip_top + self.lab_scroll
+
+    sc.set_clip(prev_clip)

@@ -1,0 +1,116 @@
+% ============================================================
+%  Bioinformatics LAB -- Lab 0 (warm-up)
+%  The Chromatin Game: a first look at Hi-C maps
+%  Author: Sebastian Korsak, Warsaw University of Technology, MiNI
+% ============================================================
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=1.8cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{charter}           % clean, readable serif text font
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+
+% --- one subdued accent colour, echoing the lecture's "beaver" theme ---
+\definecolor{accent}{HTML}{7A1F2B}
+\definecolor{taskbg}{HTML}{F4EDEE}
+
+\hypersetup{colorlinks=true, urlcolor=accent, linkcolor=accent}
+
+\titleformat{\section}{\large\bfseries\color{accent}}{\thesection}{0.6em}{}
+\titlespacing*{\section}{0pt}{6pt}{3pt}
+\setlist[enumerate]{leftmargin=1.6em, itemsep=1pt, topsep=1pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyfoot[L]{\small Bioinformatics LAB -- Warsaw University of Technology (MiNI)}
+\fancyfoot[R]{\small Sebastian Korsak}
+
+\newcommand{\key}[1]{\texttt{\textbf{#1}}}
+
+% --- a run-in Task heading that flows straight into its own paragraph ---
+\newcounter{tasknum}
+\newcommand{\task}[1]{%
+	\stepcounter{tasknum}%
+	\par\vspace{8pt}\noindent%
+	{\color{accent}\textbf{Task \thetasknum.}} \textbf{#1} }
+
+\begin{document}
+\thispagestyle{fancy}
+
+\begin{center}
+	{\LARGE\bfseries\color{accent} Lab 0 -- The Chromatin Game}\\[2pt]
+	{\large A first, hands-on look at Hi-C maps and chromatin folding}\\[2pt]
+	{\small Warm-up for Laboratory 1 \quad $\cdot$ \quad Time needed: 20--25 minutes}
+\end{center}
+
+\vspace{3pt}
+\noindent
+Hi-C experiments give an $N\times N$ \textbf{contact map}: entry $(i,j)$ counts how
+often loci $i$ and $j$ touch in 3D. This lab has you fold a virtual chromosome
+yourself and watch that map emerge, so the idea stops being abstract.
+
+\task{Set up an isolated Python environment and install the game.}%
+The game is open-source: \url{https://github.com/SFGLab/TheChromatinGame}.
+\begin{center}
+\begin{minipage}{0.95\linewidth}
+\footnotesize
+\begin{verbatim}
+git clone https://github.com/SFGLab/TheChromatinGame.git
+cd TheChromatinGame
+python -m venv chromatin_env        # create the environment
+source chromatin_env/bin/activate   # on Windows: chromatin_env\Scripts\activate
+pip install -r requirements.txt
+python main.py
+\end{verbatim}
+\end{minipage}
+\end{center}
+\noindent A dedicated environment per project -- here via \texttt{venv}, or
+\texttt{pyenv}/\texttt{conda} if you prefer -- keeps packages from clashing,
+a habit worth starting on day one.
+
+\task{Open \textbf{Chromatin MiNI-Lab} from the main menu and freely paint
+compartments, tie a loop, and move a slider.}%
+Press \key{C} and drag across the colour ribbon to mark beads red (A) or blue
+(B); press \key{L} and click two beads (or a cell on the map) to tie a loop
+between them; then drag any slider -- e.g.\ temperature or attraction strength
+-- under the heatmap. Everything else is explained in-game (press \key{H}).
+Watch the 3D structure and the heatmap respond together, live: what you are
+doing here is the easy direction, the one physics is good at, where your
+choices fix the structure and the structure fixes the map.
+
+\task{Go to \textbf{Single Player}, level 1 (normal mode), and reproduce the
+target heatmap shown to you.}%
+A target map is displayed next to your own, live one; using the same painting
+and loop-tying controls as before, try to make the two look alike, then press
+\key{Enter} to freeze the simulation and score your match. Now you are running
+the direction biology actually hands you: given the map, recover the structure
+that produced it. Many different structures can cast nearly the same shadow,
+and noise can point you toward the wrong one -- which is why this is a genuine
+\textbf{inverse problem}, not just a puzzle.
+
+\task{Replay the same level in \textbf{hard mode}, where the target's loop
+anchors and compartment colours are hidden and only its raw contact map is
+shown.}%
+Study that map for a moment -- where is the checkerboard strongest, where do
+bright squares sit on the diagonal -- before placing any loops or colour, then
+score yourself as before. This is the realistic case: a real Hi-C analyst
+never sees the ground truth, only the measurement. Normal mode had handed you
+the answer key; hard mode does not, exactly like a real dataset on your desk.
+
+\task{Before you leave, write one or two sentences answering: what produced
+the checkerboard pattern, what produced the bright square on the diagonal, and
+why was hard mode harder?}%
+The same logic -- indirect measurement, a physical model, an inferred
+structure -- underlies protein structure determination by X-ray, NMR, or
+cryo-EM, and it is exactly what we build explicitly, for proteins and
+chromatin alike, in the \emph{Molecular Simulations} block later in this
+course. This game is your first playable encounter with that idea.
+
+\end{document}
