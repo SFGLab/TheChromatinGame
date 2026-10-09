@@ -113,6 +113,8 @@ class Game:
         self.lab_sliders: dict[str, widgets.Slider] = {}
         self.lab_bead_slider: widgets.Slider | None = None
         self.lab_scroll = 0
+        # Which Lab panel (if any) is maximized: None | "hm" (both heatmaps) | "eig"
+        self.lab_zoom: str | None = None
         
         # workers
         self._work_progress = [0.0]
@@ -249,6 +251,13 @@ class Game:
             if n == "Exit Lab":
                 self.state = MENU
                 self.lab = None
+                self.lab_zoom = None
+            elif n == "Maximize heatmaps":
+                self.lab_zoom = "hm"
+            elif n == "Maximize E1":
+                self.lab_zoom = "eig"
+            elif n == "Minimize":
+                self.lab_zoom = None
             elif n == "Pause":
                 lab.paused = not lab.paused
             elif n == "Randomize":
@@ -363,7 +372,8 @@ class Game:
                         continue
                 if (self.state == LAB
                         and self.lab is not None
-                        and self.lab.show_analysis):
+                        and self.lab.show_analysis
+                        and not self.lab_zoom):
                     if self.lab.analysis_panel.handle_click(ev.pos):
                         continue
 
@@ -376,14 +386,19 @@ class Game:
             if self.state == PLAY and not self.show_help:
                 self.on_play_mouse(ev)
 
-            # ---- Lab-screen controls (sliders, bead count, 3D + heatmap)
+            # ---- Lab-screen controls (sliders, bead count, 3D + heatmap) --
+            # while a panel is maximized, only that panel's own interaction
+            # is live (3D view, ribbon and sliders sit behind the veil).
             if self.state == LAB and self.lab is not None:
-                for sl in self.lab_sliders.values():
-                    if sl.handle(ev):
-                        self.lab.apply_param(sl.key, sl.value)
-                if self.lab_bead_slider is not None and self.lab_bead_slider.handle(ev):
-                    self.lab.set_bead_count(int(self.lab_bead_slider.value))
-                self.on_lab_mouse(ev)
+                if self.lab_zoom:
+                    self.on_lab_zoom_mouse(ev)
+                else:
+                    for sl in self.lab_sliders.values():
+                        if sl.handle(ev):
+                            self.lab.apply_param(sl.key, sl.value)
+                    if self.lab_bead_slider is not None and self.lab_bead_slider.handle(ev):
+                        self.lab.set_bead_count(int(self.lab_bead_slider.value))
+                    self.on_lab_mouse(ev)
 
     def handle_event(self, ev) -> str:
         """Returns 'close', 'consumed', or 'outside'.
@@ -423,6 +438,9 @@ class Game:
             elif self.state == PLAY and self.session and self.session.show_analysis:
                 # Close the analysis panel first; a second ESC exits to menu
                 self.session.show_analysis = False
+            elif self.state == LAB and self.lab_zoom:
+                # Minimize a maximized panel first; a second ESC goes further
+                self.lab_zoom = None
             elif self.state == LAB and self.lab and self.lab.show_analysis:
                 self.lab.show_analysis = False
             elif self.state == SETTINGS:
@@ -434,6 +452,7 @@ class Game:
             elif self.state == LAB:
                 self.state = MENU
                 self.lab = None
+                self.lab_zoom = None
             else:
                 self.running = False
             return
@@ -571,6 +590,7 @@ class Game:
         # (not rebuilt per-frame), so a fresh Lab session starts with a clean set.
         self.lab_sliders = {}
         self.lab_bead_slider = None
+        self.lab_zoom = None
         self.state = LAB
 
     def begin_measure(self):
@@ -718,22 +738,22 @@ class Game:
 from .draw import (
     draw, compute_layout, paint_background,
     draw_menu, draw_settings, draw_loading, draw_play,
-    draw_lab, draw_lab_panel, compute_lab_layout,   # <-- compute_lab_layout added
+    draw_lab, draw_lab_panel, draw_lab_zoom, compute_lab_layout,
     draw_view_hud, draw_view_controls, draw_header, draw_footer,
     draw_settle_overlay, draw_results, draw_help, draw_toast,
 )
 from .interact import (
-    on_play_mouse, on_lab_mouse, map_click, click_bead,
+    on_play_mouse, on_lab_mouse, on_lab_zoom_mouse, map_click, click_bead,
     ribbon_bin, ribbon_bin_n,
 )
 
 for _fn in [
     draw, compute_layout, paint_background,
     draw_menu, draw_settings, draw_loading, draw_play,
-    draw_lab, draw_lab_panel, compute_lab_layout,   # <-- added here too
+    draw_lab, draw_lab_panel, draw_lab_zoom, compute_lab_layout,
     draw_view_hud, draw_view_controls, draw_header, draw_footer,
     draw_settle_overlay, draw_results, draw_help, draw_toast,
-    on_play_mouse, on_lab_mouse, map_click, click_bead,
+    on_play_mouse, on_lab_mouse, on_lab_zoom_mouse, map_click, click_bead,
     ribbon_bin, ribbon_bin_n,
 ]:
     setattr(Game, _fn.__name__, _fn)

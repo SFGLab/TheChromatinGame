@@ -158,7 +158,9 @@ def on_lab_mouse(self, ev):
             return
         rect = self.rects["view"]
         ribbon = self.rects.get("ribbon")
-        grid_a = self.hm_lab_a.grid
+        # Only hm_lab_b (correlation/coolwarm) is on screen in the compact
+        # view -- hm_lab_a (contact) only gets laid out when "hm" is zoomed,
+        # so it's deliberately not checked here.
         grid_b = self.hm_lab_b.grid
 
         if ev.type == pygame.MOUSEWHEEL:
@@ -175,11 +177,10 @@ def on_lab_mouse(self, ev):
             self.lab_view.pending = None
             return
 
-        # ---- either heatmap: click a cell to tie/untie that loop
+        # ---- the heatmap: click a cell to tie/untie that loop
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 \
-                and (grid_a.collidepoint(ev.pos) or grid_b.collidepoint(ev.pos)):
-            hm = self.hm_lab_a if grid_a.collidepoint(ev.pos) else self.hm_lab_b
-            b = hm.bin_at(*ev.pos)
+                and grid_b.collidepoint(ev.pos):
+            b = self.hm_lab_b.bin_at(*ev.pos)
             if b and b[0] != b[1]:
                 lo, hi = min(b), max(b)
                 if lab.poly.valid_loop(lo, hi):
@@ -262,6 +263,52 @@ def on_lab_mouse(self, ev):
                     a = self.lab_view.pending
                     self.lab_view.pending = None
                     lab.poly.toggle_loop(*sorted((a, i)))
+
+def on_lab_zoom_mouse(self, ev):
+    """Mouse handling while a Lab panel is maximized: only that panel's own
+    interaction is live. "hm" keeps click-to-tie-loop on either heatmap
+    (hover is handled inside Heatmap.draw itself via the `mouse` arg). "eig"
+    has no heatmap, but the paint ribbon drawn under it is live, same as
+    the compact view's ribbon."""
+    lab = self.lab
+    if lab is None:
+        return
+
+    if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+        self.paint = None
+        return
+
+    if self.lab_zoom == "hm":
+        if ev.type != pygame.MOUSEBUTTONDOWN or ev.button != 1:
+            return
+        for hm in (self.hm_lab_a, self.hm_lab_b):
+            if not hm.grid.collidepoint(ev.pos):
+                continue
+            b = hm.bin_at(*ev.pos)
+            if b and b[0] != b[1]:
+                lo, hi = min(b), max(b)
+                if lab.poly.valid_loop(lo, hi):
+                    lab.poly.toggle_loop(lo, hi)
+                    self.say(f"loop ({lo},{hi}) toggled")
+                else:
+                    self.say(f"anchors must be at least {MIN_LOOP_SPAN} beads apart")
+            return
+
+    elif self.lab_zoom == "eig":
+        ribbon = self.rects.get("ribbon")   # draw_lab_zoom points this at the big ribbon
+        if not ribbon:
+            return
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and ribbon.collidepoint(ev.pos):
+            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
+            if i is not None:
+                lab.poly.flip_type(i)
+                self.paint = int(lab.poly.types[i])
+        elif ev.type == pygame.MOUSEMOTION and ev.buttons[0] and self.paint is not None \
+                and ribbon.collidepoint(ev.pos):
+            i = self.ribbon_bin_n(ev.pos[0], lab.poly.n)
+            if i is not None:
+                lab.poly.set_type(i, self.paint)
+
 
 def ribbon_bin_n(self, mx: int, n: int) -> int | None:
     r = self.rects.get("ribbon")

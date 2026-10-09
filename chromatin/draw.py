@@ -11,7 +11,7 @@ Organisation
   LOADING         draw_loading
   PLAY SESSION    draw_play, draw_header, draw_footer, draw_view_hud,
                   draw_settle_overlay, draw_results, draw_help
-  MiNI-LAB        draw_lab, draw_lab_panel, compute_lab_layout
+  MiNI-LAB        draw_lab, draw_lab_panel, draw_lab_zoom, compute_lab_layout
 """
 from __future__ import annotations
 import time
@@ -47,6 +47,8 @@ def draw(self):
         self.draw_results(W, H)
     elif self.state == LAB:
         self.draw_lab(W, H)
+        if self.lab_zoom:
+            self.draw_lab_zoom(W, H)
 
     if self.show_help:
         self.draw_help(W, H)
@@ -853,11 +855,25 @@ def draw_help(self, W, H):
 # ===========================================================================
 
 def compute_lab_layout(self, W, H):
-    """Compute rects for the Lab screen: header/footer/3D/maps/param panel.
+    """Compute rects for the Lab screen: header/footer/3D/map/E1/param panel.
 
-    Separate from compute_layout because the Lab has a fundamentally different
-    arrangement: no right-column heatmap pair, instead a scrollable parameter
-    panel on the right and stacked 3D + two heatmaps on the left.
+    Two columns, each filling the full column height -- "almost square"
+    rather than a thin strip:
+      left column  -- the 3D structure, the actual point of the simulation.
+      right column -- a thin control row, one heatmap (correlation/coolwarm:
+                       shows loops AND compartments at once), a second
+                       control row, the E1 strip, and the paint ribbon. The
+                       contact map is one Maximize click away instead of
+                       sitting here too -- that used to squeeze the 3D view
+                       down to a sliver.
+    The control rows exist so the Maximize buttons have their own dedicated
+    strip above each panel -- never drawn inside the heatmap/E1 rect itself,
+    so they can't crowd that panel's own title text or shrink what it has
+    to draw in. The heatmap square is a FIXED size (HM_SIDE below) that does
+    not drift with window width or bead count -- it only shrinks below that
+    if the column is genuinely too narrow/short to show it at all, and even
+    then the 3D view gives way last: it always fills the left column
+    outright.
     """
     S     = getattr(theme, "FONT_SCALE", 1.0)
     P     = int(theme.PAD * S)
@@ -869,19 +885,53 @@ def compute_lab_layout(self, W, H):
     left    = pygame.Rect(P, body.y + P, W - panel_w - P, body.h - 2 * P)
     panel   = pygame.Rect(left.right + P, body.y + P, panel_w - 2 * P, body.h - 2 * P)
 
-    view_h  = int(left.h * 0.55)
-    view    = pygame.Rect(left.x, left.y, left.w, view_h)
-    maps_y  = view.bottom + P
-    hm_w    = (left.w - P) // 2
-    hm_h    = left.bottom - maps_y
+    col_w = (left.w - P) // 2
+    view  = pygame.Rect(left.x, left.y, col_w, left.h)
+
+    # Right column, top to bottom: [ctrl] heatmap [ctrl] E1 strip, ribbon.
+    title_h  = int(46 * S)
+    label_h  = int(30 * S)
+    ctrl_h   = int(24 * S)   # dedicated row for a Maximize button, nothing else
+    eig_h    = int(70 * S)
+    ribbon_h = int(18 * S)
+    legend_h = int(16 * S)
+    gap      = int(8 * S)    # between stacked sections
+
+    HM_SIDE = int(320 * S)   # fixed -- doesn't change with window size or bead count
+    chrome  = int(36 * S)    # matches Heatmap.layout's own pad_l+6
+    side    = min(HM_SIDE, col_w - chrome)   # only ever shrinks if truly too narrow
+    hm_h    = title_h + side + label_h
+
+    fixed_below = 2 * ctrl_h + eig_h + ribbon_h + legend_h + 5 * gap
+    overflow = (hm_h + fixed_below) - left.h
+    if overflow > 0:
+        side -= overflow
+        hm_h  = title_h + side + label_h
+    side = max(int(120 * S), side)
+    hm_h = title_h + side + label_h
+
+    cx = left.x + col_w + P
+    # The heatmap panel is only as wide as it needs to be (content width),
+    # centered in the column -- not stretched to col_w like the E1/ribbon bars.
+    hm_w = side + chrome
+    hm_ctrl  = pygame.Rect(cx, left.y, col_w, ctrl_h)
+    map_rect = pygame.Rect(cx + max(0, (col_w - hm_w) // 2),
+                           hm_ctrl.bottom + gap, hm_w, hm_h)
+    eig_ctrl    = pygame.Rect(cx, map_rect.bottom + gap, col_w, ctrl_h)
+    eig_rect    = pygame.Rect(cx, eig_ctrl.bottom + gap, col_w, eig_h)
+    ribbon_rect = pygame.Rect(cx, eig_rect.bottom + gap, col_w, ribbon_h)
+    # legend_h is left as the reserved gap below ribbon_rect for its caption.
 
     self.rects = {
-        "header": pygame.Rect(0, 0, W, hdr_h),
-        "footer": pygame.Rect(0, H - ftr_h, W, ftr_h),
-        "view":   view,
-        "map_a":  pygame.Rect(left.x, maps_y, hm_w, hm_h),
-        "map_b":  pygame.Rect(left.x + hm_w + P, maps_y, hm_w, hm_h),
-        "panel":  panel,
+        "header":   pygame.Rect(0, 0, W, hdr_h),
+        "footer":   pygame.Rect(0, H - ftr_h, W, ftr_h),
+        "view":     view,
+        "map_ctrl": hm_ctrl,
+        "map":      map_rect,
+        "eig_ctrl": eig_ctrl,
+        "eig":      eig_rect,
+        "ribbon":   ribbon_rect,
+        "panel":    panel,
     }
 
 
@@ -889,6 +939,7 @@ def draw_lab(self, W, H):
     """Chromatin MiNI-Lab screen: live polymer + two heatmaps + param panel."""
     sc  = self.screen
     lab = self.lab
+    S   = getattr(theme, "FONT_SCALE", 1.0)
     self.buttons = {}
     self.compute_lab_layout(W, H)
     R = self.rects
@@ -939,25 +990,48 @@ def draw_lab(self, W, H):
                        lab.poly.box, t=time.time() - self.t0, mouse=self.mouse)
     self.draw_view_controls(R["view"], self.lab_view, "lab")
 
-    # ---- Two heatmaps: contact frequency (Reds) + O/E correlation (coolwarm)
-    self.hm_lab_a.layout(R["map_a"], lab.poly.n)
-    self.hm_lab_b.layout(R["map_b"], lab.poly.n)
-    self.hm_lab_a.draw(sc, lab.P_live, lab.C_live, "contact",
-                       loops_player=lab.poly.loops,
-                       subtitle="live contact frequency",
-                       accent=theme.ROYAL_RED, live=not lab.paused,
-                       mouse=self.mouse, scale=lab.scale)
+    # ---- Control row: Maximize button for the heatmap -- its own strip,
+    # never drawn inside the heatmap panel, so it never crowds the panel's
+    # title/subtitle or eats into the grid's share of the panel rect.
+    btn_w, btn_h = int(34 * S), R["map_ctrl"].h
+    bmax = widgets.Button((R["map_ctrl"].right - btn_w, R["map_ctrl"].y, btn_w, btn_h),
+                          "Maximize heatmaps", icon="expand", label="",
+                          accent=theme.CYAN)
+    self.buttons["lab_max_hm"] = bmax
+    bmax.draw(sc)
+
+    # ---- One heatmap: O/E correlation (coolwarm) -- shows loops AND
+    # compartments at once. Contact frequency is still there, one Maximize
+    # click away (it opens both side by side) rather than permanently
+    # halving this column's width.
+    mr = R["map"]
+    self.hm_lab_b.layout(mr, lab.poly.n)
     self.hm_lab_b.draw(sc, lab.P_live, lab.C_live, "corr",
                        loops_player=lab.poly.loops,
                        subtitle="O/E correlation",
                        accent=theme.CYAN, live=not lab.paused,
                        mouse=self.mouse, scale=lab.scale)
 
-    # ---- Colour ribbon spanning the full left column width
-    ry     = R["map_a"].bottom + int(10 * getattr(theme, "FONT_SCALE", 1.0))
-    ribbon = pygame.Rect(R["view"].x, ry, R["view"].w, 14)
+    # ---- Control row: Maximize button for the E1 strip, same idea.
+    beig = widgets.Button((R["eig_ctrl"].right - btn_w, R["eig_ctrl"].y, btn_w, btn_h),
+                          "Maximize E1", icon="expand", label="", accent=theme.CYAN)
+    self.buttons["lab_max_eig"] = beig
+    beig.draw(sc)
+
+    # ---- E1 (compartment eigenvector) strip -- always visible, live (it
+    # used to not be shown in the Lab at all).
+    er  = R["eig"]
+    bar = pygame.Rect(er.x, er.y + 16, er.w - 4, er.h - 16)
+    widgets.eigen_track(sc, bar, lab.e1_live, title="E1 — compartments, live",
+                        mouse=self.mouse)
+
+    # ---- Chromatin-state ribbon: click/drag to paint A/B compartments --
+    # the "where you choose the states" control, right under the E1 track.
+    ribbon = R["ribbon"]
     self.rects["ribbon"] = ribbon
     widgets.type_track(sc, ribbon, lab.poly.types, hover=self.lab_view.hover)
+    widgets.label(sc, "red = A  ·  blue = B  —  click or drag to paint",
+                 ribbon.x, ribbon.bottom + 2, size=10, col=theme.TEXT_FAINT)
 
     # ---- Scrollable parameter panel on the right
     self.draw_lab_panel(R["panel"])
@@ -965,6 +1039,79 @@ def draw_lab(self, W, H):
     # ---- Structural analysis overlay (drawn last so it sits on top of everything)
     if lab.show_analysis:
         lab.analysis_panel.draw(sc, W, H)
+
+
+def draw_lab_zoom(self, W, H):
+    """Maximized Lab view: either both heatmaps side by side, or the E1
+    track with the paint ribbon underneath so you can keep working while
+    looking at it. Same veil+panel pattern as draw_help, drawn on top of
+    the normal draw_lab frame -- but sized to what's actually being shown
+    in each case, not a fixed box: the window itself adapts to the plot
+    rather than the plot sitting in a window sized for something else.
+    """
+    sc  = self.screen
+    lab = self.lab
+    S   = getattr(theme, "FONT_SCALE", 1.0)
+    veil = pygame.Surface((W, H), pygame.SRCALPHA)
+    veil.fill((*theme.INK, 225))
+    sc.blit(veil, (0, 0))
+
+    HEADER_H  = int(56 * S)    # title/subtitle/LIVE badge + the Minimize button's row
+    CAPTION_H = int(28 * S)    # one line of hint text under the content
+    MARGIN    = int(28 * S)    # side/bottom breathing room around the content
+
+    if self.lab_zoom == "hm":
+        GAP = int(28 * S)
+        avail_w = W - 100
+        avail_h = H - 100
+        hm_side = min((avail_w - 2 * MARGIN - GAP) // 2,
+                      avail_h - HEADER_H - CAPTION_H)
+        hm_side = max(int(220 * S), hm_side)
+        pw = 2 * hm_side + 2 * MARGIN + GAP
+        ph = hm_side + HEADER_H + CAPTION_H
+    else:
+        bar_h    = int(170 * S)
+        ribbon_h = int(20 * S)
+        pw = min(W - 100, int(640 * S))
+        ph = HEADER_H + bar_h + int(30 * S) + ribbon_h + CAPTION_H
+
+    r = pygame.Rect((W - pw) // 2, (H - ph) // 2, pw, ph)
+    widgets.panel(sc, r, fill=theme.PANEL)
+
+    bmin = widgets.Button((r.right - int(116 * S), r.y + int(12 * S),
+                          int(96 * S), int(30 * S)), "Minimize", key="ESC")
+    bmin.active = True
+    # Only this button is live while zoomed -- replaces, not adds to, whatever
+    # draw_lab already put in self.buttons this frame (header, maximize, ...).
+    self.buttons = {"lab_zoom_min": bmin}
+    bmin.draw(sc)
+
+    if self.lab_zoom == "hm":
+        map_a = pygame.Rect(r.x + MARGIN, r.y + HEADER_H, hm_side, hm_side)
+        map_b = pygame.Rect(map_a.right + GAP, r.y + HEADER_H, hm_side, hm_side)
+        self.hm_lab_a.layout(map_a, lab.poly.n)
+        self.hm_lab_b.layout(map_b, lab.poly.n)
+        self.hm_lab_a.draw(sc, lab.P_live, lab.C_live, "contact",
+                           loops_player=lab.poly.loops, subtitle="live contact frequency",
+                           accent=theme.ROYAL_RED, live=not lab.paused,
+                           mouse=self.mouse, scale=lab.scale)
+        self.hm_lab_b.draw(sc, lab.P_live, lab.C_live, "corr",
+                           loops_player=lab.poly.loops, subtitle="O/E correlation",
+                           accent=theme.CYAN, live=not lab.paused,
+                           mouse=self.mouse, scale=lab.scale)
+        widgets.label(sc, "click a cell on either map to tie/untie that loop",
+                     r.x + MARGIN, r.bottom - CAPTION_H + 4, size=11, col=theme.TEXT_DIM)
+
+    elif self.lab_zoom == "eig":
+        bar = pygame.Rect(r.x + MARGIN, r.y + HEADER_H, r.w - 2 * MARGIN, bar_h)
+        widgets.eigen_track(sc, bar, lab.e1_live, title="E1 — compartments, live",
+                           mouse=self.mouse)
+        ribbon = pygame.Rect(bar.x, bar.bottom + int(30 * S), bar.w, ribbon_h)
+        self.rects["ribbon"] = ribbon   # overrides the compact one for this frame
+        widgets.type_track(sc, ribbon, lab.poly.types, hover=self.lab_view.hover)
+        widgets.label(sc, "red = A compartment  ·  blue = B compartment  "
+                     "—  click or drag the ribbon to paint",
+                     ribbon.x, ribbon.bottom + 8, size=11, col=theme.TEXT_DIM)
 
 def draw_lab_panel(self, panel_rect):
     """Scrollable parameter panel for the MiNI-Lab.

@@ -87,13 +87,47 @@ class Button:
             bg, fg, bd = theme.PANEL, theme.TEXT_DIM, theme.RULE
         pygame.draw.rect(surf, bg, self.rect, border_radius=6)
         pygame.draw.rect(surf, bd, self.rect, 1, border_radius=6)
-        f = theme.font(self.size, bold=self.active)
-        img = f.render(self.label, True, fg)
-        surf.blit(img, img.get_rect(center=self.rect.center))
+        if self.icon == "expand":
+            # Vector icon, not a font glyph -- Quicksand has no "expand" glyph,
+            # which used to draw as a blank/placeholder box.
+            expand_icon(surf, self.rect.inflate(-8, -8), fg)
+        elif self.label:
+            f = theme.font(self.size, bold=self.active)
+            img = f.render(self.label, True, fg)
+            surf.blit(img, img.get_rect(center=self.rect.center))
         if self.key:
             kf = theme.font(9, mono=True)
             ki = kf.render(self.key, True, theme.lerp_col(fg, theme.INK, 0.45))
             surf.blit(ki, (self.rect.right - ki.get_width() - 6, self.rect.top + 3))
+
+
+def expand_icon(surf, rect, col):
+    """'Maximize' icon: a diagonal double-headed arrow, corner to corner --
+    the standard "expand" symbol (same idea as a spreadsheet's resize
+    handle). Drawn as a line + two filled arrowheads, not a font glyph, so
+    it always renders crisply regardless of what the font covers."""
+    side = min(rect.w, rect.h)
+    pad  = max(3, int(side * 0.20))
+    lw   = max(2, int(side * 0.11))
+    x0, y0 = rect.left + pad, rect.top + pad
+    x1, y1 = rect.right - pad, rect.bottom - pad
+    head = max(5, int(side * 0.30))
+    pygame.draw.line(surf, col, (x0, y0), (x1, y1), lw)
+    _arrowhead(surf, col, (x0, y0), (x1, y1), head)
+    _arrowhead(surf, col, (x1, y1), (x0, y0), head)
+
+
+def _arrowhead(surf, col, tip, tail, size):
+    """Small filled triangle at `tip`, pointing away from `tail`."""
+    dx, dy = tip[0] - tail[0], tip[1] - tail[1]
+    L = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / L, dy / L
+    px, py = -uy, ux
+    back = (tip[0] - ux * size, tip[1] - uy * size)
+    p1 = (back[0] + px * size * 0.55, back[1] + py * size * 0.55)
+    p2 = (back[0] - px * size * 0.55, back[1] - py * size * 0.55)
+    pygame.draw.polygon(surf, col, [tip, p1, p2])
+    pygame.draw.aalines(surf, col, True, [tip, p1, p2])   # crisp anti-aliased edge
 
 
 # ---------------------------------------------------------------- heatmap
@@ -184,11 +218,14 @@ class Heatmap:
         # ticks -- tall enough that none of them overlap each other.
         pad_l, pad_t = 30, 46
         avail = max(0, min(rect.w - pad_l - 6, rect.h - pad_t - 30))
-        # Round down to a multiple of n so each cell is a whole pixel (no
-        # seams) -- but never claim more than `avail` actually gives, or the
-        # grid would spill past whatever's drawn below/beside it.
-        side = (avail // n) * n if n and avail // n > 0 else avail
-        self.grid = pygame.Rect(rect.x + pad_l, rect.y + pad_t, side, side)
+        # The grid always fills `avail` exactly -- it used to round down to
+        # a whole multiple of n "for pixel-perfect cells", which quietly
+        # shrank the image by however much that rounding threw away, so the
+        # same panel rect rendered a visibly different size depending on
+        # the bead count. Cells are scaled from an n x n surface either way
+        # (see draw() below), so there's no seam either way -- just a picture
+        # that now always fills its frame, like any other image would.
+        self.grid = pygame.Rect(rect.x + pad_l, rect.y + pad_t, avail, avail)
 
     def bin_at(self, mx, my):
         if not self.grid.collidepoint(mx, my):
@@ -279,22 +316,36 @@ class Heatmap:
             label(surf, MODE_LABEL[mode], self.grid.x, y, size=11, col=theme.TEXT_DIM)
 
     def _dot(self, surf, i, j, col, filled=True):
+        """Loop-anchor marker. Always ringed in BOTH black and white so it
+        reads against any cell colour -- the 'fall' ramp runs white-to-black
+        and coolwarm runs blue-to-red, so a marker tinted to match either
+        end of either ramp used to all but vanish into it."""
         cell = self.grid.w / self.n
         cx = self.grid.x + (j + 0.5) * cell
         cy = self.grid.y + (i + 0.5) * cell
-        r = max(2.5, min(6.0, cell * 0.34))
+        r = max(3.0, min(7.5, cell * 0.38))
+        cxi, cyi = int(cx), int(cy)
+
+        # Soft colour halo first -- extra separation from a busy background.
+        g = pygame.Surface((int(r * 6), int(r * 6)), pygame.SRCALPHA)
+        theme.circle(g, (*col, 70), (int(r * 3), int(r * 3)), int(r * 2.6))
+        surf.blit(g, (cx - r * 3, cy - r * 3))
+
         if filled:
-            g = pygame.Surface((int(r * 6), int(r * 6)), pygame.SRCALPHA)
-            theme.circle(g, (*col, 55), (int(r * 3), int(r * 3)), int(r * 2.6))
-            surf.blit(g, (cx - r * 3, cy - r * 3))
-            theme.circle(surf, col, (int(cx), int(cy)), int(r))
-            theme.circle(surf, (255, 255, 255), (int(cx), int(cy)), int(r), 1)
+            theme.circle(surf, col, (cxi, cyi), int(r))
+            theme.circle(surf, (0, 0, 0), (cxi, cyi), int(r), 1)
+            theme.circle(surf, (255, 255, 255), (cxi, cyi), max(1, int(r) - 2), 1)
         else:
-            theme.circle(surf, col, (int(cx), int(cy)), int(r + 1.5), 1)
+            theme.circle(surf, (0, 0, 0), (cxi, cyi), int(r + 2), 2)
+            theme.circle(surf, col, (cxi, cyi), int(r + 1), 2)
 
 
 # ------------------------------------------------------------- E1 track
-def eigen_track(surf, rect, e1, types=None, *, title="E1", show_axis=True):
+def eigen_track(surf, rect, e1, types=None, *, title="E1", show_axis=True, mouse=None):
+    """Bar chart of the first eigenvector. `mouse`, when given, turns on
+    hover: the bead under the cursor is outlined and its index/value printed
+    below the bar -- same "interaction mode" as the heatmaps.
+    """
     pygame.draw.rect(surf, theme.INK_2, rect, border_radius=3)
     pygame.draw.rect(surf, theme.RULE_SOFT, rect, 1, border_radius=3)
     n = len(e1)
@@ -316,6 +367,14 @@ def eigen_track(surf, rect, e1, types=None, *, title="E1", show_axis=True):
         pygame.draw.line(surf, theme.RULE, (rect.x, mid), (rect.right, mid), 1)
     label(surf, title, rect.x + 3, rect.y - 13, size=10, col=theme.TEXT_DIM,
           mono=True, bold=True)
+
+    if mouse is not None and rect.collidepoint(mouse):
+        i = max(0, min(n - 1, int((mouse[0] - rect.x) / rect.w * n)))
+        hl = pygame.Rect(int(rect.x + i * w), rect.y, max(2, int(w) - 1), rect.h)
+        pygame.draw.rect(surf, theme.CYAN, hl, 1)
+        comp = "A" if e1[i] >= 0 else "B"
+        label(surf, f"bead {i}  E1={e1[i]:+.3f}  ({comp})",
+              rect.x, rect.bottom + 4, size=11, col=theme.CYAN, mono=True, bold=True)
 
 
 def type_track(surf, rect, types, hover=None):
