@@ -524,7 +524,7 @@ def draw_play(self, W, H):
         s.analysis_panel.draw(sc, W, H)
 
 def draw_header(self, W):
-    """Play-screen header: title, mode buttons, turn banner, measure button."""
+    """Play-screen header: title, view/analysis buttons, turn banner, measure button."""
     sc = self.screen
     s  = self.session
     r  = self.rects["header"]
@@ -544,36 +544,26 @@ def draw_header(self, W):
     widgets.label(sc, s.level.name + diff_tag, edge, int(29 * S),
                   size=11, col=theme.POOR if s.hard else theme.TEXT_FAINT)
 
-    # Mode toggles (enabled/disabled depending on whose turn it is in versus)
+    # Loops and compartments are both always editable -- see interact.py --
+    # so there's no mode toggle here any more, just View and Analysis.
     x         = int(220 * S)
-    w_loops   = int(108 * S)
-    w_comp    = int(150 * S)
     w_view    = int(80 * S)
     w_analysis= int(100 * S)
 
-    bl = widgets.Button((x, btn_y, w_loops, btn_h),
-                        "Loops", key="L", accent=theme.GREEN)
-    bc = widgets.Button((x + w_loops + gap, btn_y, w_comp, btn_h),
-                        "Compartments", key="C", accent=theme.CYAN)
-    bv = widgets.Button((x + w_loops + gap + w_comp + gap, btn_y, w_view, btn_h),
-                        "View", key="V")
-    ba = widgets.Button((x + w_loops + gap + w_comp + gap + w_view + gap,
-                         btn_y, w_analysis, btn_h),
-                        "Analysis", accent=theme.AMBER)   # amber: distinct from both GREEN and CYAN
+    bv = widgets.Button((x, btn_y, w_view, btn_h), "View", key="V")
+    ba = widgets.Button((x + w_view + gap, btn_y, w_analysis, btn_h),
+                        "Analysis", accent=theme.AMBER)
 
-    bl.active  = s.mode == "loop"
-    bc.active  = s.mode == "comp"
-    bl.enabled = s.allowed("loop")
-    bc.enabled = s.allowed("comp")
     ba.active  = s.show_analysis   # lit up while the panel is open
 
-    for k, b in (("loops", bl), ("comp", bc), ("view", bv), ("analysis", ba)):
+    for k, b in (("view", bv), ("analysis", ba)):
         self.buttons[k] = b
         b.draw(sc)
 
-    modes_right = x + w_loops + gap + w_comp + gap + w_view
+    modes_right = x + w_view + gap + w_analysis
 
-    # Turn banner (versus mode only)
+    # Turn banner (versus mode only) -- also the only "whose move" indicator
+    # now; loops and compartments are both always live, gated per-turn.
     if s.two_player:
         acc  = PLAYER_ACCENT[s.turn]
         br_w = int(260 * S)
@@ -621,12 +611,11 @@ def draw_footer(self, W, H):
     pygame.draw.rect(sc, theme.INK, r)
     pygame.draw.line(sc, theme.RULE, (0, r.y), (W, r.y), 1)
     s = self.session
+    # Both moves are always live (see interact.py) -- one hint covers both,
+    # instead of switching text depending on a mode that no longer exists.
     hint = (
-        "LOOPS   click cell (i,j) on your map to tie that loop  ·  or click "
-        "bead i then bead j in 3D  ·  click again to untie  ·  BACKSPACE clears"
-        if s.mode == "loop" else
-        "COMPARTMENTS   click or drag the colour ribbon to paint  ·  or click "
-        "a bead in 3D to flip it  ·  watch E1 follow"
+        "LOOPS click a map cell (i,j), or bead i then j in 3D (BACKSPACE clears)  ·  "
+        "COMPARTMENTS paint the ribbon, or SHIFT+click a bead"
     )
     controls = ("drag polymer to move · drag space to orbit · wheel zoom · "
                 "SPACE pause · F fast-forward · R reset view")
@@ -794,14 +783,14 @@ def draw_help(self, W, H):
             "eigenvector of the correlation matrix, sits red above the line, blue below.",
             "Press V to flip between views.",
         ]),
-        ("your two moves", theme.GREEN, [
-            "LOOPS (L) -- spot a green dot at (i,j)? Click that same cell on YOUR map.",
-            "          It ties a bond between two non-consecutive beads and gently pulls",
-            "          the segment between them into a TAD. Anchors must sit >= 3 apart.",
-            "          (You can also click bead i, then bead j, straight in 3D.)",
-            "COMPARTMENTS (C) -- paint the ribbon under your map, or click beads in 3D.",
-            "          Red (A) attracts red weakly; blue (B) attracts blue strongly; A and",
-            "          B repel. Watch the blue beads huddle up and the checkerboard emerge.",
+        ("your two moves -- always both live", theme.GREEN, [
+            "LOOPS -- spot a green dot at (i,j)? Click that same cell on YOUR map, or",
+            "          click bead i then bead j in 3D. Ties a bond between two non-",
+            "          consecutive beads and gently pulls the segment between them into",
+            "          a TAD. Anchors must sit >= 3 apart. Click again to untie.",
+            "COMPARTMENTS -- click or drag the ribbon under your map, or SHIFT+click a",
+            "          bead in 3D. Red (A) attracts red weakly; blue (B) attracts blue",
+            "          strongly; A and B repel. Watch the checkerboard emerge.",
         ]),
         ("the physics", theme.CYAN, [
             "It's real overdamped Langevin dynamics under the hood: a springy backbone,",

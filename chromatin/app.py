@@ -184,11 +184,7 @@ class Game:
 
         elif self.state == PLAY:
             s = self.session
-            if n == "Loops":
-                self.set_mode("loop")
-            elif n == "Compartments":
-                self.set_mode("comp")
-            elif n == "View":
+            if n == "View":
                 i = widgets.MODES.index(s.map_mode)
                 s.map_mode = widgets.MODES[(i + 1) % len(widgets.MODES)]
             elif n in ("Measure", "End turn"):
@@ -521,13 +517,7 @@ class Game:
                 s.analysis_panel.reset()
             return
 
-        if k == pygame.K_l:
-            self.set_mode("loop")
-        elif k == pygame.K_c:
-            self.set_mode("comp")
-        elif k == pygame.K_TAB:
-            self.set_mode("comp" if s.mode == "loop" else "loop")
-        elif k == pygame.K_v:
+        if k == pygame.K_v:
             i = widgets.MODES.index(s.map_mode)
             s.map_mode = widgets.MODES[(i + 1) % len(widgets.MODES)]
             self.say(f"map view: {widgets.MODE_LABEL[s.map_mode]}")
@@ -617,7 +607,8 @@ class Game:
         s = self.session
         p, t = s.poly, s.target
         oe, C, e1 = an.pipeline(P, p.types.astype(float))
-        rep = an.evaluate(P, t.P, C, t.C, e1, t.e1, list(p.loops), list(t.loops))
+        rep = an.evaluate(P, t.P, C, t.C, e1, t.e1, list(p.loops), list(t.loops),
+                          calib=t.calib)
         s.rep = rep
         s.P_live = P.copy()
         s.C_live, s.e1_live = C, e1
@@ -634,10 +625,8 @@ class Game:
             self.say(f"{PLAYER_NAME[who]} scores {val:.1f}")
             if who == P_LOOP:
                 s.turn = P_COMP
-                s.mode = "comp"
             else:
                 s.turn = P_LOOP
-                s.mode = "loop"
                 s.round += 1
             s.turn_start = time.time()
             self.view.pending = None
@@ -735,7 +724,7 @@ from .draw import (
 )
 from .interact import (
     on_play_mouse, on_lab_mouse, map_click, click_bead,
-    ribbon_bin, ribbon_bin_n, set_mode,
+    ribbon_bin, ribbon_bin_n,
 )
 
 for _fn in [
@@ -745,7 +734,7 @@ for _fn in [
     draw_view_hud, draw_view_controls, draw_header, draw_footer,
     draw_settle_overlay, draw_results, draw_help, draw_toast,
     on_play_mouse, on_lab_mouse, map_click, click_bead,
-    ribbon_bin, ribbon_bin_n, set_mode,
+    ribbon_bin, ribbon_bin_n,
 ]:
     setattr(Game, _fn.__name__, _fn)
 

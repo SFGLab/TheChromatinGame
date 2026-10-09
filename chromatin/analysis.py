@@ -180,7 +180,16 @@ def evaluate(P_sim: np.ndarray, P_tgt: np.ndarray,
              C_sim: np.ndarray, C_tgt: np.ndarray,
              e1_sim: np.ndarray, e1_tgt: np.ndarray,
              loops_placed: list[tuple[int, int]],
-             loops_tgt: list[tuple[int, int]]) -> Report:
+             loops_tgt: list[tuple[int, int]],
+             calib: dict | None = None) -> Report:
+    """`calib`, when given, is {"loop_score"/"comp_score"/"total": (floor, ceiling)}:
+    raw scores from a deliberately-wrong replicate and a flawless one, measured
+    against this specific target (see levels.py: _calibrate). Two independently
+    sampled ensembles of identical physics never agree perfectly, so without
+    this a "perfect" run reads well under 100 -- worse the bigger the polymer.
+    (Same idea as replicate reproducibility in real Hi-C.) Headline scores are
+    rescaled between floor and ceiling so 0 = nothing right, ~100 = as good as
+    physically achievable on this target."""
     n = P_sim.shape[0]
     m = upper_mask(n, 2)
     lp_s = np.log(np.clip(P_sim[m], 1e-4, None))
@@ -207,4 +216,9 @@ def evaluate(P_sim: np.ndarray, P_tgt: np.ndarray,
     r["comp_score"] = 100.0 * (0.60 * pos(r["eig_r"]) + 0.40 * pos(r["checker"]))
     r["total"] = 100.0 * (0.40 * pos(r["scc"]) + 0.25 * pos(r["pearson"]) +
                           0.35 * pos(r["eig_r"]))
+
+    if calib:
+        for key in ("loop_score", "comp_score", "total"):
+            lo, hi = calib[key]
+            r[key] = 100.0 * np.clip((r[key] - lo) / max(hi - lo, 1.0), 0.0, 1.0)
     return r

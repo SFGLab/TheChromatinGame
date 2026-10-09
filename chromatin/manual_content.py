@@ -528,12 +528,26 @@ SECTIONS = [
             {"type": "subheading", "text": "The total score"},
             {"type": "body", "text":
                 "All four scores combine into one weighted "
-                "sum, scaled to run from 0 to 100. The weights are "
+                "sum. The weights are "
                 "chosen so compartments and loops pull roughly equal "
                 "weight — you can't coast by ignoring either one:"},
             {"type": "equation",
              "latex": r"\mathrm{Score} = w_1\cdot\mathrm{SCC} + w_2\cdot r_{E1} + w_3\cdot r_{\mathrm{cb}} + w_4\cdot F_1",
-             "label": "weighted total (0-100)"},
+             "label": "weighted total (before calibration)"},
+            {"type": "body", "text":
+                "That raw sum is then calibrated per level before it's shown "
+                "as a 0-100 score. Why: two honest simulations of the exact "
+                "same ground truth never land on identical contact maps — "
+                "there's always sampling noise — so even a flawless replay "
+                "of the target wouldn't push the raw sum to 100 on its own "
+                "(the same effect as replicate reproducibility in real Hi-C). "
+                "So each level is calibrated once, when it's first built: a "
+                "flawless replicate sets the ceiling and a deliberately wrong "
+                "one (inverted compartments, no loops) sets the floor, both "
+                "measured the same way your own Measure button works. Your "
+                "raw score is then rescaled between those two — 0 means "
+                "nothing right, 100 means as good as this specific target "
+                "can physically be scored."},
             {"type": "body", "text":
                 "In two-player mode the scores go their separate ways: "
                 "the loop player is scored only on F1; the "

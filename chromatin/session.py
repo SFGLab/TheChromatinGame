@@ -25,7 +25,8 @@ class Session:
 
         self.target = None
         self.poly: Polymer | None = None
-        self.mode = "loop"
+        # No loop/compartment "mode" any more -- both moves are always live,
+        # each gated only by whose turn it is (see allowed()).
         self.map_mode = "split"
 
         self.round = 1
@@ -70,7 +71,7 @@ class Session:
         self.C_live, self.e1_live = C, e1
         t = self.target
         self.rep_live = an.evaluate(self.P_live, t.P, C, t.C, e1, t.e1,
-                                    list(p.loops), list(t.loops))
+                                    list(p.loops), list(t.loops), calib=t.calib)
 
     def time_left(self) -> float | None:
         if not self.turn_seconds:

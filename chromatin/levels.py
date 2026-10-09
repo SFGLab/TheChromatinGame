@@ -16,6 +16,12 @@ from .physics_jax import FastPolymer   # same engine as the live game -- see phy
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache")
 
+# The player's own "Measure" protocol (constants.MEAS_*, duplicated here so
+# this module stays pygame-free) -- the scoring ceiling below has to measure
+# the same way the player does, not with the target's own longer, more
+# precise build recipe.
+_MEAS_BURN, _MEAS_SAMPLES, _MEAS_EVERY = 2500, 520, 20
+
 
 @dataclass(frozen=True)
 class Level:
@@ -52,7 +58,7 @@ LEVELS = [
 class Target:
     """Ground truth + the maps derived from it."""
 
-    def __init__(self, level: Level, seed: int, types, loops, P, C, e1, oe):
+    def __init__(self, level: Level, seed: int, types, loops, P, C, e1, oe, calib: dict):
         self.level = level
         self.seed = seed
         self.types = types
@@ -61,6 +67,7 @@ class Target:
         self.C = C
         self.e1 = e1
         self.oe = oe
+        self.calib = calib   # {"loop_score"/"comp_score"/"total": (floor, ceiling)} -- see _calibrate()
         self.n = level.n
 
 
@@ -101,6 +108,38 @@ def _ground_truth(level: Level, rng: np.random.Generator):
     return types, loops
 
 
+def _measure_rep(types, loops, loops_placed, P_tgt, C_tgt, e1_tgt, seed: int,
+                 progress=None) -> dict:
+    """Raw (uncalibrated) scores for one independent replicate of (types,
+    loops), measured the same way the player's own Measure button does, and
+    compared to the real target. `loops_placed` is what's scored as "tied"
+    -- the true loops for a flawless replicate, empty for a deliberately
+    wrong one -- while loops_tgt (the real anchors) never changes."""
+    poly = FastPolymer(len(types), SimParams(), seed=seed)
+    poly.load_config(np.asarray(types), list(loops))
+    P_rep = simulate_ensemble(poly, _MEAS_BURN, _MEAS_SAMPLES, _MEAS_EVERY, progress)
+    oe, C_rep, e1_rep = an.pipeline(P_rep, poly.types.astype(float))
+    return an.evaluate(P_rep, P_tgt, C_rep, C_tgt, e1_rep, e1_tgt,
+                       loops_placed, list(loops))
+
+
+def _calibrate(types, loops, P_tgt, C_tgt, e1_tgt, seed: int, progress=None) -> dict:
+    """Score anchors for this specific target: a 'ceiling' from a flawless
+    replicate (same types/loops, independently resampled -- two honest
+    ensembles of identical physics never agree perfectly even then) and a
+    'floor' from a deliberately wrong one (inverted types, no loops).
+    Headline scores are rescaled between the two in analysis.evaluate, so
+    0 means nothing right and ~100 means as good as physically achievable
+    on this target -- not a guess, measured the same way the player is."""
+    half = (lambda p: progress(p / 2)) if progress else None
+    half2 = (lambda p: progress(0.5 + p / 2)) if progress else None
+    hi = _measure_rep(types, loops, list(loops),
+                      P_tgt, C_tgt, e1_tgt, seed * 31 + 9001, half)
+    lo = _measure_rep(-np.asarray(types), [], [],
+                      P_tgt, C_tgt, e1_tgt, seed * 31 + 4001, half2)
+    return {k: (lo[k], hi[k]) for k in ("loop_score", "comp_score", "total")}
+
+
 def _cache_key(level: Level, seed: int) -> str:
     par = SimParams()
     sig = f"{level.name}|{level.n}|{level.n_loops}|{level.block_min}|{level.block_max}|" \
@@ -119,9 +158,24 @@ def build_target(level: Level, seed: int, progress=None) -> Target:
             types, loops_arr, P = z["types"], z["loops"], z["P"]
             loops = [tuple(int(v) for v in row) for row in loops_arr.reshape(-1, 2)]
             oe, C, e1 = an.pipeline(P, types.astype(float))
+            if "calib_total" in z:
+                calib = {"loop_score": tuple(z["calib_loop"]),
+                         "comp_score": tuple(z["calib_comp"]),
+                         "total": tuple(z["calib_total"])}
+            else:
+                # Older cache, built before scores were calibrated -- measure
+                # it once, then resave so this only happens once.
+                calib = _calibrate(types, loops, P, C, e1, seed, progress)
+                try:
+                    np.savez_compressed(path, types=types, loops=loops_arr, P=P,
+                                        calib_loop=calib["loop_score"],
+                                        calib_comp=calib["comp_score"],
+                                        calib_total=calib["total"])
+                except Exception:
+                    pass
             if progress:
                 progress(1.0)
-            return Target(level, seed, types, loops, P, C, e1, oe)
+            return Target(level, seed, types, loops, P, C, e1, oe, calib)
         except Exception:
             pass  # corrupt cache -> just rebuild
 
@@ -129,11 +183,19 @@ def build_target(level: Level, seed: int, progress=None) -> Target:
     types, loops = _ground_truth(level, rng)
     poly = FastPolymer(level.n, SimParams(), seed=seed + 1000)
     poly.load_config(types, loops)
-    P = simulate_ensemble(poly, level.burn_in, level.n_samples, level.sample_every, progress)
+    # Target build and calibration share the progress bar: ~2/3 for the
+    # target itself, ~1/3 for the two calibration replicates.
+    sub = (lambda p: progress(0.65 * p)) if progress else None
+    sub2 = (lambda p: progress(0.65 + 0.35 * p)) if progress else None
+    P = simulate_ensemble(poly, level.burn_in, level.n_samples, level.sample_every, sub)
     oe, C, e1 = an.pipeline(P, types.astype(float))
+    calib = _calibrate(types, loops, P, C, e1, seed, sub2)
+    loops_arr = np.array(loops, dtype=np.int32).reshape(-1, 2)
     try:
-        np.savez_compressed(path, types=types,
-                            loops=np.array(loops, dtype=np.int32).reshape(-1, 2), P=P)
+        np.savez_compressed(path, types=types, loops=loops_arr, P=P,
+                            calib_loop=calib["loop_score"],
+                            calib_comp=calib["comp_score"],
+                            calib_total=calib["total"])
     except Exception:
         pass
-    return Target(level, seed, types, loops, P, C, e1, oe)
+    return Target(level, seed, types, loops, P, C, e1, oe, calib)

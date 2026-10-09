@@ -64,7 +64,7 @@ def on_play_mouse(self, ev):
             self.press = (i, ev.pos)
             self.dragged = False
             mods = pygame.key.get_mods()
-            if s.mode == "comp" and (mods & pygame.KMOD_SHIFT) and s.allowed("comp"):
+            if (mods & pygame.KMOD_SHIFT) and s.allowed("comp"):
                 self.paint = B_TYPE if s.poly.types[i] == A_TYPE else A_TYPE
                 s.poly.set_type(i, self.paint)
         return
@@ -114,13 +114,10 @@ def ribbon_bin(self, mx: int) -> int | None:
     return i if 0 <= i < self.session.poly.n else None
 
 def map_click(self, i: int, j: int):
-    """A click on your own contact map. In loop mode that cell IS the move."""
+    """A click on your own contact map: that cell IS the loop you're tying."""
     s = self.session
     if not s.allowed("loop"):
         self.say(f"loops are the {PLAYER_NAME[P_LOOP].lower()}'s move")
-        return
-    if s.mode != "loop":
-        self.say("switch to Loops (L) to place anchors from the map")
         return
     if i == j:
         return
@@ -133,31 +130,27 @@ def map_click(self, i: int, j: int):
     self.say(f"loop ({lo},{hi}) {res} from the map")
 
 def click_bead(self, i: int):
+    """A plain bead click always starts/finishes a loop (shift+click flips
+    its compartment instead -- see on_play_mouse). Both moves are always
+    live; only whose turn it is (in versus) can block one of them."""
     s = self.session
-    if s.mode == "loop":
-        if not s.allowed("loop"):
-            self.say(f"loops are the {PLAYER_NAME[P_LOOP].lower()}'s move")
-            return
-        if self.view.pending is None:
-            self.view.pending = i
-            self.say(f"anchor {i} selected -- pick its partner")
-        elif self.view.pending == i:
-            self.view.pending = None
-        else:
-            a = self.view.pending
-            res = s.poly.toggle_loop(a, i)
-            self.view.pending = None
-            if res == "invalid":
-                self.say(f"anchors must be at least {MIN_LOOP_SPAN} beads apart")
-            else:
-                lo, hi = min(a, i), max(a, i)
-                self.say(f"loop ({lo},{hi}) {res}")
+    if not s.allowed("loop"):
+        self.say(f"loops are the {PLAYER_NAME[P_LOOP].lower()}'s move")
+        return
+    if self.view.pending is None:
+        self.view.pending = i
+        self.say(f"anchor {i} selected -- pick its partner")
+    elif self.view.pending == i:
+        self.view.pending = None
     else:
-        if not s.allowed("comp"):
-            self.say(f"colours are the {PLAYER_NAME[P_COMP].lower()}'s move")
-            return
-        s.poly.flip_type(i)
-        self.say(f"bead {i} -> {'A red' if s.poly.types[i] > 0 else 'B blue'}")
+        a = self.view.pending
+        res = s.poly.toggle_loop(a, i)
+        self.view.pending = None
+        if res == "invalid":
+            self.say(f"anchors must be at least {MIN_LOOP_SPAN} beads apart")
+        else:
+            lo, hi = min(a, i), max(a, i)
+            self.say(f"loop ({lo},{hi}) {res}")
 
 def on_lab_mouse(self, ev):
         lab = self.lab
@@ -276,11 +269,3 @@ def ribbon_bin_n(self, mx: int, n: int) -> int | None:
         return None
     i = int((mx - r.x) / r.w * n)
     return i if 0 <= i < n else None
-
-def set_mode(self, mode: str):
-        s = self.session
-        if s.two_player and not s.allowed(mode):
-            self.say(f"not your move -- it is the {PLAYER_NAME[s.turn].lower()}'s turn")
-            return
-        s.mode = mode
-        self.view.pending = None
