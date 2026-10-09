@@ -124,19 +124,27 @@ def _measure_rep(types, loops, loops_placed, P_tgt, C_tgt, e1_tgt, seed: int,
 
 
 def _calibrate(types, loops, P_tgt, C_tgt, e1_tgt, seed: int, progress=None) -> dict:
-    """Score anchors for this specific target: a 'ceiling' from a flawless
-    replicate (same types/loops, independently resampled -- two honest
+    """Score anchors for this specific target: a 'ceiling' from flawless
+    replicates (same types/loops, independently resampled -- two honest
     ensembles of identical physics never agree perfectly even then) and a
     'floor' from a deliberately wrong one (inverted types, no loops).
     Headline scores are rescaled between the two in analysis.evaluate, so
     0 means nothing right and ~100 means as good as physically achievable
-    on this target -- not a guess, measured the same way the player is."""
-    half = (lambda p: progress(p / 2)) if progress else None
-    half2 = (lambda p: progress(0.5 + p / 2)) if progress else None
-    hi = _measure_rep(types, loops, list(loops),
-                      P_tgt, C_tgt, e1_tgt, seed * 31 + 9001, half)
+    on this target -- not a guess, measured the same way the player is.
+
+    The ceiling is the average of two flawless replicates rather than one:
+    a single sample can land low just by chance, which used to let mediocre
+    play round up to 100 whenever it got lucky."""
+    third = (lambda p: progress(p / 3)) if progress else None
+    third2 = (lambda p: progress(1 / 3 + p / 3)) if progress else None
+    third3 = (lambda p: progress(2 / 3 + p / 3)) if progress else None
+    hi1 = _measure_rep(types, loops, list(loops),
+                       P_tgt, C_tgt, e1_tgt, seed * 31 + 9001, third)
+    hi2 = _measure_rep(types, loops, list(loops),
+                       P_tgt, C_tgt, e1_tgt, seed * 31 + 9002, third2)
     lo = _measure_rep(-np.asarray(types), [], [],
-                      P_tgt, C_tgt, e1_tgt, seed * 31 + 4001, half2)
+                      P_tgt, C_tgt, e1_tgt, seed * 31 + 4001, third3)
+    hi = {k: 0.5 * (hi1[k] + hi2[k]) for k in hi1}
     return {k: (lo[k], hi[k]) for k in ("loop_score", "comp_score", "total")}
 
 
@@ -144,7 +152,7 @@ def _cache_key(level: Level, seed: int) -> str:
     par = SimParams()
     sig = f"{level.name}|{level.n}|{level.n_loops}|{level.block_min}|{level.block_max}|" \
           f"{seed}|{par.eps_AA}|{par.eps_BB}|{par.eps_AB}|{par.eps_domain}|{par.sigma}|" \
-          f"{par.ev_eps}|{par.k_loop}|{par.contact_rc}|v3"
+          f"{par.ev_eps}|{par.k_loop}|{par.contact_rc}|v4"
     return hashlib.md5(sig.encode()).hexdigest()[:16]
 
 

@@ -218,7 +218,14 @@ def evaluate(P_sim: np.ndarray, P_tgt: np.ndarray,
                           0.35 * pos(r["eig_r"]))
 
     if calib:
+        # GAMMA > 1 bends the curve down in the middle: you now have to get
+        # genuinely close to the ceiling to see numbers near 100, not just
+        # "better than the floor". Was a straight 0-100 lerp, which let
+        # so-so runs round up to 100 whenever the (noisy) ceiling sample
+        # happened to be low.
+        GAMMA = 1.4
         for key in ("loop_score", "comp_score", "total"):
             lo, hi = calib[key]
-            r[key] = 100.0 * np.clip((r[key] - lo) / max(hi - lo, 1.0), 0.0, 1.0)
+            frac = np.clip((r[key] - lo) / max(hi - lo, 1.0), 0.0, 1.0)
+            r[key] = 100.0 * frac ** GAMMA
     return r
