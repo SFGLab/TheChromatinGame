@@ -61,8 +61,10 @@ def draw(self):
 # tracks, colour ribbon, metric table, score and colorbars (see draw_play).
 # compute_layout uses this to cap the heatmap size so that whole stack never
 # runs past the footer on a short window -- keep the two in sync if either
-# section's layout changes.
-PLAY_RIGHT_CHROME_H = 412
+# section's layout changes. Kept as small as the content allows (metric
+# table is 2-column, gaps trimmed) since every px here is a px the heatmap
+# doesn't get -- the main bottleneck on a laptop-sized window.
+PLAY_RIGHT_CHROME_H = 312
 
 
 def compute_layout(self, W, H):
@@ -71,17 +73,32 @@ def compute_layout(self, W, H):
     All sizes scale with theme.FONT_SCALE so Large font mode gets more room.
     The heatmap square is also capped by the window's HEIGHT (not just its
     width) so the metric table/score/colorbars stacked below it never run
-    past the footer on a short window. The Lab has its own layout function
-    (compute_lab_layout) because it has a completely different arrangement.
+    past the footer on a short window -- and now never exceeds what's
+    actually available either way, so a small window shrinks the heatmap
+    instead of overlapping the chrome below it. Bigger polymers get a wider
+    right column (up to a cap) so cells stay legible -- a 100x100 contact
+    grid needs far more pixels per cell than a 10x10 one does. The Lab has
+    its own layout function (compute_lab_layout): different arrangement.
     """
     S = getattr(theme, "FONT_SCALE", 1.0)
     P     = int(theme.PAD * S)
     hdr_h = int(theme.HEADER_H * S)
     ftr_h = int(theme.FOOTER_H * S)
 
-    # Right column widens slightly at Large so bin labels don't crowd.
-    right_frac = 0.45 + (S - 1.0) * 0.10
+    # Bead count of the level in play -- only PLAY/SETTLE use these rects,
+    # everything else (menu, lab, ...) falls back to a mid-size default.
+    sess = getattr(self, "session", None)
+    tgt  = getattr(sess, "target", None) if sess else None
+    n    = tgt.n if tgt is not None else 20
+
+    # Right column widens slightly at Large, and further for bigger n so the
+    # heatmaps can claim more pixels -- the 3D view tolerates being narrower
+    # (camera zoom compensates) far better than a dense contact map does.
+    # Capped well short of 1.0 so the 3D view never disappears.
+    right_frac = 0.45 + (S - 1.0) * 0.10 + min(0.20, max(0, n - 20) * 0.0022)
     right_w    = max(int(620 * S), int(W * right_frac))
+    # Never let the right column crowd the 3D view below a usable minimum.
+    right_w    = min(right_w, max(int(300 * S), W - int(260 * S) - P))
 
     body  = pygame.Rect(0, hdr_h, W, H - hdr_h - ftr_h)
     view  = pygame.Rect(P, body.y + P, W - right_w - P, body.h - 2 * P)
@@ -93,9 +110,13 @@ def compute_layout(self, W, H):
     label_h = int(22 * S)
     inner   = int(32 * S)
     hm_w    = (right.w - P) // 2
-    side_by_w = hm_w - inner
-    side_by_h = right.h - PLAY_RIGHT_CHROME_H - title_h - label_h - P
-    side    = max(80, min(side_by_w, side_by_h))
+    side_by_w = max(0, hm_w - inner)
+    side_by_h = max(0, right.h - PLAY_RIGHT_CHROME_H - title_h - label_h - P)
+
+    # Always use every pixel that's actually available -- the right_frac
+    # bump above is what gives big-n levels extra room; this just never
+    # claims more than side_by_w/side_by_h allow, so it can't overlap.
+    side    = min(side_by_w, side_by_h)
     hm_h    = title_h + side + label_h
 
     self.rects = {
@@ -453,7 +474,7 @@ def draw_play(self, W, H):
 
     # ---- E1 tracks (target track hidden in hard mode -- it encodes the answer)
     g1, g2 = self.hm_tgt.grid, self.hm_sim.grid
-    y = R["tgt"].bottom + 14
+    y = R["tgt"].bottom + 10
     if s.hard:
         ph = pygame.Rect(g1.x, y, g1.w, 34)
         pygame.draw.rect(sc, theme.PANEL, ph, border_radius=6)
@@ -467,10 +488,10 @@ def draw_play(self, W, H):
                         s.e1_live, title="E1 yours")
 
     # ---- Colour ribbon (always visible -- shows the player's own colouring)
-    # yr leaves a 18px gap below the 34px-tall E1 tracks (y+34 .. yr) so the
+    # yr leaves a small gap below the 34px-tall E1 tracks (y+34 .. yr) so the
     # "click a cell..." caption has room to sit between them instead of
     # overlapping the E1-yours bars above it.
-    yr     = y + 52
+    yr     = y + 50
     widgets.label(sc, "click a cell to tie that loop",
                   g2.x + g2.w, y + 36, size=10, col=theme.CYAN,
                   mono=True, bold=True, right=True)
@@ -486,13 +507,13 @@ def draw_play(self, W, H):
         widgets.label(sc, "green dots = target anchors",
                       g1.x, yr + 2, size=10, col=theme.GREEN, mono=True, bold=True)
 
-    # ---- Metric table
-    mt = pygame.Rect(R["right"].x, yr + 34, R["right"].w, 180)
+    # ---- Metric table (2 columns x 3 rows -- half the height of 1 column)
+    mt = pygame.Rect(R["right"].x, yr + 34, R["right"].w, 96)
     widgets.metric_table(sc, mt, s.rep_live,
                          live=(self.state == PLAY and not s.paused))
 
     # ---- Score display (different layout for solo vs versus)
-    ys = mt.y + 190
+    ys = mt.y + 106
     if s.two_player:
         hw = (R["right"].w - theme.PAD) // 2
         widgets.big_score(sc, pygame.Rect(R["right"].x, ys, hw, 56),
@@ -516,7 +537,7 @@ def draw_play(self, W, H):
                       size=12, col=theme.TEXT_DIM, mono=True, bold=True)
 
     widgets.colorbars(sc,
-                      pygame.Rect(R["right"].x, ys + 92, R["right"].w, 30),
+                      pygame.Rect(R["right"].x, ys + 82, R["right"].w, 30),
                       self._scale, s.map_mode)
 
     # ---- Structural analysis overlay (drawn last -- sits on top of everything)

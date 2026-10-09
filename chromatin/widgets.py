@@ -183,8 +183,11 @@ class Heatmap:
         # pad_t gives 3 stacked rows above the grid: title, subtitle, bin
         # ticks -- tall enough that none of them overlap each other.
         pad_l, pad_t = 30, 46
-        side = min(rect.w - pad_l - 6, rect.h - pad_t - 30)
-        side = max(40, (side // n) * n if side // n > 0 else side)
+        avail = max(0, min(rect.w - pad_l - 6, rect.h - pad_t - 30))
+        # Round down to a multiple of n so each cell is a whole pixel (no
+        # seams) -- but never claim more than `avail` actually gives, or the
+        # grid would spill past whatever's drawn below/beside it.
+        side = (avail // n) * n if n and avail // n > 0 else avail
         self.grid = pygame.Rect(rect.x + pad_l, rect.y + pad_t, side, side)
 
     def bin_at(self, mx, my):
@@ -331,14 +334,49 @@ def type_track(surf, rect, types, hover=None):
 # ------------------------------------------------------------ metric table
 # Note: APA used to be a row here -- dropped (see analysis.py) since the toy
 # physics rarely builds up real loop-corner enrichment, so it only ever read 0.
+# Two columns of 3 (contact-decay trio | compartment+loop trio) instead of
+# one column of 6 -- half the height, which is the heatmap's biggest rival
+# for vertical space on a laptop-sized window. Keep descriptions short:
+# narrow columns leave little room for them.
 ROWS = [
-    ("scc", "SCC", "stratum-adjusted corr", 0.0, 1.0),
-    ("pearson", "Pearson", "log contact, |i-j|>=2", 0.0, 1.0),
+    ("scc", "SCC", "similarity", 0.0, 1.0),
+    ("pearson", "Pearson", "log contacts", 0.0, 1.0),
     ("spearman", "Spearman", "rank corr", 0.0, 1.0),
-    ("eig_r", "E1 r", "compartment corr", -1.0, 1.0),
-    ("checker", "Checker", "correlation-matrix corr", -1.0, 1.0),
-    ("loop_f1", "Loop F1", "anchors within +/-1 bin", 0.0, 1.0),
+    ("eig_r", "E1 r", "compartments", -1.0, 1.0),
+    ("checker", "Checker", "plaid corr", -1.0, 1.0),
+    ("loop_f1", "Loop F1", "anchor hits", 0.0, 1.0),
 ]
+
+def _metric_row(surf, cx, col_w, y, row_h, key, name, desc, lo, hi, rep):
+    """One metric row (name | desc | bar | value) within a column of width col_w."""
+    v = float(rep.get(key, 0.0)) if rep else 0.0
+    q = max(0.0, min(1.0, (v - lo) / (hi - lo) if hi > lo else 0.0))
+    col = theme.score_color(q)
+
+    x_name, x_desc = cx + 2, cx + 66
+    x_bar,  x_val  = cx + col_w - 128, cx + col_w - 2
+
+    label(surf, name, x_name, y + 3, size=12, col=theme.TEXT, mono=True, bold=True)
+    label(surf, desc, x_desc, y + 4, size=11, col=theme.TEXT_DIM)
+
+    bar = pygame.Rect(x_bar, y + 6, 64, 7)
+    pygame.draw.rect(surf, theme.INK, bar, border_radius=3)
+    if lo < 0:
+        # Diverging metric: bar grows from the centre
+        mid = bar.x + bar.w // 2
+        pygame.draw.line(surf, theme.RULE, (mid, bar.y - 2), (mid, bar.bottom + 2), 1)
+        wdt = abs(v) / max(hi, 1e-9) * (bar.w / 2)
+        x0  = mid if v >= 0 else mid - wdt
+        pygame.draw.rect(surf, col, (x0, bar.y, max(1, wdt), bar.h), border_radius=3)
+    else:
+        pygame.draw.rect(surf, col, (bar.x, bar.y, max(1, q * bar.w), bar.h),
+                         border_radius=3)
+
+    label(surf, f"{v:+.3f}" if lo < 0 else f"{v:.3f}",
+          x_val, y + 3, size=12, col=col, mono=True, bold=True, right=True)
+    # Row separator -- a little softer than the original
+    sep_y = y + row_h - 4
+    pygame.draw.line(surf, theme.RULE_SOFT, (cx, sep_y), (cx + col_w, sep_y), 1)
 
 def metric_table(surf, rect, rep, *, live=False):
     eyebrow(surf, "simulated  vs  experimental", rect.x, rect.y)
@@ -346,55 +384,19 @@ def metric_table(surf, rect, rep, *, live=False):
         label(surf, "updating", rect.right, rect.y - 1, size=10, col=theme.AMBER,
               mono=True, bold=True, right=True)
 
-    y     = rect.y + 18
-    row_h = 26                          # was 21 -- extra px between rows
+    y0    = rect.y + 18
+    row_h = 26
+    gap   = 14
+    col_w = (rect.w - gap) // 2
 
-    # Column x-positions:  name | description | bar | value
-    # Pushing the description further right and the bar+value further right
-    # gives each column breathing room instead of running into the next.
-    x_name = rect.x + 2
-    x_desc = rect.x + 78               # was 66
-    x_bar  = rect.right - 162          # was rect.right - 148  (bar is 86 wide)
-    x_val  = rect.right - 2
+    for ci, rows in enumerate((ROWS[:3], ROWS[3:])):
+        cx = rect.x + ci * (col_w + gap)
+        y = y0
+        for key, name, desc, lo, hi in rows:
+            _metric_row(surf, cx, col_w, y, row_h, key, name, desc, lo, hi, rep)
+            y += row_h
 
-    for key, name, desc, lo, hi in ROWS:
-        v = float(rep.get(key, 0.0)) if rep else 0.0
-        q = max(0.0, min(1.0, (v - lo) / (hi - lo) if hi > lo else 0.0))
-        col = theme.score_color(q)
-
-        # Metric abbreviation (left column)
-        label(surf, name, x_name, y + 3, size=12, col=theme.TEXT, mono=True, bold=True)
-
-        # Description (middle column)
-        label(surf, desc, x_desc, y + 4, size=11, col=theme.TEXT_DIM)
-
-        # Progress bar (right-centre column)
-        bar = pygame.Rect(x_bar, y + 6, 86, 7)
-        pygame.draw.rect(surf, theme.INK, bar, border_radius=3)
-        if lo < 0:
-            # Diverging metric: bar grows from the centre
-            mid = bar.x + bar.w // 2
-            pygame.draw.line(surf, theme.RULE,
-                             (mid, bar.y - 2), (mid, bar.bottom + 2), 1)
-            wdt = abs(v) / max(hi, 1e-9) * (bar.w / 2)
-            x0  = mid if v >= 0 else mid - wdt
-            pygame.draw.rect(surf, col, (x0, bar.y, max(1, wdt), bar.h),
-                             border_radius=3)
-        else:
-            pygame.draw.rect(surf, col,
-                             (bar.x, bar.y, max(1, q * bar.w), bar.h),
-                             border_radius=3)
-
-        # Numeric value (right column)
-        label(surf, f"{v:+.3f}" if lo < 0 else f"{v:.3f}",
-              x_val, y + 3, size=12, col=col, mono=True, bold=True, right=True)
-
-        y += row_h
-        # Row separator -- a little softer than the original
-        pygame.draw.line(surf, theme.RULE_SOFT,
-                         (rect.x, y - 4), (rect.right, y - 4), 1)
-
-    return y
+    return y0 + 3 * row_h
 
 def big_score(surf, rect, value, caption, accent=None):
     accent = theme.CYAN if accent is None else accent
