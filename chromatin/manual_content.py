@@ -505,35 +505,11 @@ SECTIONS = [
                 "r_cb is the fine print. You'll want both running high "
                 "for full marks on the compartment side."},
 
-            {"type": "subheading", "text": "Score 4 — Aggregate peak analysis (APA)"},
+            {"type": "subheading", "text": "Score 4 — Anchor F1"},
             {"type": "body", "text":
-                "APA measures loop enrichment directly. For each loop "
-                "anchor pair (m, n) in the target, a small sub-matrix of "
-                "P is cut out around (m, n), and all these little "
-                "windows are averaged together. A real loop produces "
-                "a bright pixel right at the centre, framed by a "
-                "dimmer background:"},
-            {"type": "equation",
-             "latex": r"\mathrm{APA} = \frac{P_{\mathrm{centre}}}{\langle P_{\mathrm{background}}\rangle}",
-             "label": "loop enrichment"},
-            {"type": "body", "text":
-                "APA > 1 means genuine loop enrichment — your "
-                "polymer is being pulled into contact exactly where it "
-                "should be. APA ~ 1 means no enrichment at all — the "
-                "contacts at loop positions look no different from "
-                "background noise. "
-                "Intuition: APA rewards you for clicking the right "
-                "cells on the heatmap. It doesn't care about your other "
-                "loops — only whether the spots that should light up in "
-                "the target are also lighting up in your simulation."},
-
-            {"type": "subheading", "text": "Score 5 — Anchor F1"},
-            {"type": "body", "text":
-                "APA tells you about enrichment at the target's "
-                "positions, but it won't punish stray loops placed "
-                "somewhere completely wrong. Anchor F1 checks placement "
-                "accuracy head-on, comparing your loop anchors to the "
-                "true anchors within ±1 bead of tolerance:"},
+                "Anchor F1 checks loop placement accuracy head-on, "
+                "comparing your loop anchors to the true anchors "
+                "within ±1 bead of tolerance:"},
             {"type": "equation",
              "latex": r"F_1 = \frac{2\,\cdot\,\mathrm{precision}\,\cdot\,\mathrm{recall}}{\mathrm{precision}+\mathrm{recall}}",
              "label": "anchor placement accuracy"},
@@ -551,16 +527,16 @@ SECTIONS = [
 
             {"type": "subheading", "text": "The total score"},
             {"type": "body", "text":
-                "All five scores combine into one weighted "
+                "All four scores combine into one weighted "
                 "sum, scaled to run from 0 to 100. The weights are "
                 "chosen so compartments and loops pull roughly equal "
                 "weight — you can't coast by ignoring either one:"},
             {"type": "equation",
-             "latex": r"\mathrm{Score} = w_1\cdot\mathrm{SCC} + w_2\cdot r_{E1} + w_3\cdot r_{\mathrm{cb}} + w_4\cdot\mathrm{APA} + w_5\cdot F_1",
+             "latex": r"\mathrm{Score} = w_1\cdot\mathrm{SCC} + w_2\cdot r_{E1} + w_3\cdot r_{\mathrm{cb}} + w_4\cdot F_1",
              "label": "weighted total (0-100)"},
             {"type": "body", "text":
                 "In two-player mode the scores go their separate ways: "
-                "the loop player is scored only on APA and F1; the "
+                "the loop player is scored only on F1; the "
                 "compartment player only on r_E1 and r_cb. That keeps "
                 "the competition genuinely independent — a perfect loop "
                 "layout with random colours scores well on loops and "

@@ -88,7 +88,8 @@ def compute_layout(self, W, H):
     right = pygame.Rect(view.right + P, body.y + P, right_w - 2 * P, body.h - 2 * P)
 
     # Heatmap panel: title strip + square grid + label strip, all scaled.
-    title_h = int(30 * S)
+    # title_h matches Heatmap.layout()'s pad_t (title + subtitle + bin ticks).
+    title_h = int(46 * S)
     label_h = int(22 * S)
     inner   = int(32 * S)
     hm_w    = (right.w - P) // 2
@@ -261,9 +262,9 @@ def draw_menu(self, W, H):
     self.buttons["manual"] = bman
     blab.draw(sc); bman.draw(sc)
     widgets.label(sc, "every force · every parameter · live",
-                  x, y5 + bh_lab + V(4), size=10, col=theme.TEXT_FAINT)
+                  x, y5 + bh_lab + V(4), size=11, col=theme.TEXT_DIM)
     widgets.label(sc, "physics · equations · metrics",
-                  x + 230, y5 + bh_lab + V(4), size=10, col=theme.TEXT_FAINT)
+                  x + 230, y5 + bh_lab + V(4), size=11, col=theme.TEXT_DIM)
 
     # ---- Music strip (bottom-left)
     # note glyph needs the mono font -- Quicksand has no music-note glyph
@@ -458,7 +459,7 @@ def draw_play(self, W, H):
         pygame.draw.rect(sc, theme.PANEL, ph, border_radius=6)
         widgets.label(sc, "E1 target — hidden in hard mode",
                       ph.x + 10, ph.centery - 6,
-                      size=10, col=theme.TEXT_FAINT, mono=True)
+                      size=11, col=theme.TEXT_DIM, mono=True)
     else:
         widgets.eigen_track(sc, pygame.Rect(g1.x, y, g1.w, 34),
                             t.e1, title="E1 target")
@@ -471,8 +472,8 @@ def draw_play(self, W, H):
     # overlapping the E1-yours bars above it.
     yr     = y + 52
     widgets.label(sc, "click a cell to tie that loop",
-                  g2.x + g2.w, y + 36, size=9, col=theme.CYAN,
-                  mono=True, right=True)
+                  g2.x + g2.w, y + 36, size=10, col=theme.CYAN,
+                  mono=True, bold=True, right=True)
     ribbon = pygame.Rect(g2.x, yr, g2.w, 14)
     self.rects["ribbon"] = ribbon
     rb = (self.ribbon_bin(self.mouse[0])
@@ -480,10 +481,10 @@ def draw_play(self, W, H):
     widgets.type_track(sc, ribbon, s.poly.types,
                        hover=rb if rb is not None else self.view.hover)
     widgets.label(sc, "your colouring — click or drag to paint",
-                  g2.x, yr + 17, size=9, col=theme.TEXT_FAINT, mono=True)
+                  g2.x, yr + 17, size=10, col=theme.TEXT_DIM, mono=True)
     if not s.hard:
         widgets.label(sc, "green dots = target anchors",
-                      g1.x, yr + 2, size=9, col=theme.GREEN, mono=True)
+                      g1.x, yr + 2, size=10, col=theme.GREEN, mono=True, bold=True)
 
     # ---- Metric table
     mt = pygame.Rect(R["right"].x, yr + 34, R["right"].w, 180)
@@ -502,7 +503,7 @@ def draw_play(self, W, H):
                       f"live  loop {s.rep_live['loop_score']:5.1f}   "
                       f"comp {s.rep_live['comp_score']:5.1f}",
                       R["right"].x, ys + 62,
-                      size=11, col=theme.TEXT_FAINT, mono=True)
+                      size=12, col=theme.TEXT_DIM, mono=True, bold=True)
     else:
         widgets.big_score(sc, pygame.Rect(R["right"].x, ys, R["right"].w, 56),
                           s.rep["total"] if s.rep else s.rep_live["total"],
@@ -512,7 +513,7 @@ def draw_play(self, W, H):
                       f"live {s.rep_live['total']:5.1f}   ·   record {rec:5.1f}"
                       f"   ·   {s.measurements} measurement(s)",
                       R["right"].x, ys + 62,
-                      size=11, col=theme.TEXT_FAINT, mono=True)
+                      size=12, col=theme.TEXT_DIM, mono=True, bold=True)
 
     widgets.colorbars(sc,
                       pygame.Rect(R["right"].x, ys + 92, R["right"].w, 30),
@@ -610,7 +611,7 @@ def draw_header(self, W):
     if self.music.has_music:
         widgets.label(sc, "♪ " + self.music.title()[:28],
                       bmeas_x - gap, int(30 * S), mono=True,
-                      size=10, col=theme.TEXT_FAINT, right=True)
+                      size=11, col=theme.TEXT_DIM, right=True)
 
 
 def draw_footer(self, W, H):
@@ -679,15 +680,15 @@ def draw_view_hud(self, rect):
         f"Rg         {p.radius_of_gyration():5.2f}",
         f"box        {p.box:5.2f}",
     ]
-    w, h = 116, 14 * len(lines) + 22
+    w, h = 122, 16 * len(lines) + 22
     r    = pygame.Rect(rect.x + 10, rect.y + 10, w, h)
     s2   = pygame.Surface(r.size, pygame.SRCALPHA)
     pygame.draw.rect(s2, (*theme.INK, 165), s2.get_rect(), border_radius=6)
     sc.blit(s2, r)
     widgets.eyebrow(sc, "state", r.x + 8, r.y + 6)
     for i, ln in enumerate(lines):
-        widgets.label(sc, ln, r.x + 8, r.y + 20 + i * 14,
-                      size=10, col=theme.TEXT_DIM, mono=True)
+        widgets.label(sc, ln, r.x + 8, r.y + 20 + i * 16,
+                      size=11, col=theme.TEXT_DIM, mono=True)
 
     # Legend (bottom-left of viewport)
     ly = rect.bottom - 58
@@ -697,7 +698,7 @@ def draw_view_hud(self, rect):
             (theme.GREEN,  "loop bond · harmonic, non-consecutive")]):
         theme.circle(sc, col, (rect.x + 18, ly + i * 16 + 5), 5)
         widgets.label(sc, txt, rect.x + 30, ly + i * 16 - 2,
-                      size=10, col=theme.TEXT_FAINT)
+                      size=11, col=theme.TEXT_DIM)
     if s.paused:
         widgets.label(sc, "PAUSED", rect.centerx, rect.y + 14,
                       size=14, col=theme.AMBER, bold=True, center=True)
@@ -753,13 +754,13 @@ def draw_results(self, W, H):
             sc.blit(img, (r.x + 12, r.y + 28))
             hs = "  ".join(f"{v:.0f}" for v in s.history[i]) or "-"
             widgets.label(sc, f"rounds  {hs}", r.x + 12, r.y + 74,
-                          size=10, col=theme.TEXT_FAINT, mono=True)
+                          size=11, col=theme.TEXT_DIM, mono=True)
         widgets.label(sc,
-                      "The loop player is scored on corner enrichment and anchor accuracy; "
+                      "The loop player is scored on anchor placement accuracy; "
                       "the compartment player on E1 and the checkerboard.",
                       cx, y + 208, size=12, col=theme.TEXT_DIM, center=True)
         widgets.label(sc, "You were both folding the same polymer.",
-                      cx, y + 228, size=12, col=theme.TEXT_FAINT, center=True)
+                      cx, y + 228, size=12, col=theme.TEXT_DIM, center=True)
     else:
         widgets.label(sc, f"{s.best_total:.1f}", cx, y + 60, size=64,
                       col=theme.score_color(s.best_total / 100),
@@ -810,7 +811,7 @@ def draw_help(self, W, H):
         ]),
         ("scoring", theme.MAGENTA, [
             "Press ENTER to run a long measurement and lock in your score -- SCC is the",
-            "headline number. Versus: P1 places loops (scored on APA + anchor F1), P2",
+            "headline number. Versus: P1 places loops (scored on anchor F1), P2",
             "paints compartments (scored on E1 + checkerboard). Same polymer, two very",
             "different report cards.",
         ]),

@@ -1,4 +1,7 @@
-Drop your piano recordings here.
+The bundled tracks are original piano music composed and played by
+Sebastian Korsak (BlackPianoCat).
+
+Drop your own piano recordings here too, if you like.
 
 Supported: .mp3  .ogg  .wav  .flac
 

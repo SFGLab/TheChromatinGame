@@ -457,7 +457,11 @@ class PolymerView:
 
                 # index label: only when big enough and not too many beads
                 if show_index and n <= 80 and rad > 9:
-                    fnt = theme.font(max(9, int(rad * 0.75)), mono=True, bold=True)
+                    # ribbon mode has no bead sprite -- give the number a small
+                    # disc to sit inside, same as every other rep mode
+                    if self.rep_mode == "ribbon":
+                        theme.circle(surf, _fog_col(base, f), pts[i], rad * 0.62)
+                    fnt = theme.font(max(10, int(rad * 0.8)), mono=True, bold=True)
                     lab = fnt.render(str(i), True, (255, 255, 255))
                     lab.set_alpha(int(220 * (1 - f)))
                     sh  = fnt.render(str(i), True, (0, 0, 0))

@@ -44,8 +44,8 @@ def label(surf, text, x, y, *, size=12, col=None, mono=False, bold=False,
 
 def eyebrow(surf, text, x, y, col=None):
     """Small tracked-out caps label. Used to name every panel."""
-    col = theme.TEXT_FAINT if col is None else col
-    f = theme.font(10, bold=True)
+    col = theme.TEXT_DIM if col is None else col   # was TEXT_FAINT -- too low-contrast
+    f = theme.font(11, bold=True)
     cx = x
     for ch in text.upper():
         img = f.render(ch, True, col)
@@ -145,10 +145,10 @@ def colorbars(surf, rect, sc: Scale, mode: str):
         pygame.surfarray.blit_array(s, np.transpose(img, (1, 0, 2)))
         surf.blit(s, r)
         pygame.draw.rect(surf, theme.RULE, r, 1)
-        label(surf, "contact P", x, rect.y - 2, size=9, col=theme.TEXT_FAINT, mono=True)
-        label(surf, f"{10 ** sc.vmin:.3f}", x, rect.y + 20, size=9, col=theme.TEXT_FAINT, mono=True)
-        label(surf, f"{10 ** sc.vmax:.2f}", x + 116, rect.y + 20, size=9,
-              col=theme.TEXT_FAINT, mono=True, right=True)
+        label(surf, "contact P", x, rect.y - 2, size=10, col=theme.TEXT_DIM, mono=True)
+        label(surf, f"{10 ** sc.vmin:.3f}", x, rect.y + 20, size=10, col=theme.TEXT_DIM, mono=True)
+        label(surf, f"{10 ** sc.vmax:.2f}", x + 116, rect.y + 20, size=10,
+              col=theme.TEXT_DIM, mono=True, right=True)
         x += 152
     if mode in ("split", "corr"):
         r = pygame.Rect(x, rect.y + 10, 116, 8)
@@ -158,10 +158,10 @@ def colorbars(surf, rect, sc: Scale, mode: str):
         pygame.surfarray.blit_array(s, np.transpose(img, (1, 0, 2)))
         surf.blit(s, r)
         pygame.draw.rect(surf, theme.RULE, r, 1)
-        label(surf, "O/E correlation", x, rect.y - 2, size=9, col=theme.TEXT_FAINT, mono=True)
-        label(surf, f"{-sc.cap:+.2f}", x, rect.y + 20, size=9, col=theme.TEXT_FAINT, mono=True)
-        label(surf, f"{sc.cap:+.2f}", x + 116, rect.y + 20, size=9,
-              col=theme.TEXT_FAINT, mono=True, right=True)
+        label(surf, "O/E correlation", x, rect.y - 2, size=10, col=theme.TEXT_DIM, mono=True)
+        label(surf, f"{-sc.cap:+.2f}", x, rect.y + 20, size=10, col=theme.TEXT_DIM, mono=True)
+        label(surf, f"{sc.cap:+.2f}", x + 116, rect.y + 20, size=10,
+              col=theme.TEXT_DIM, mono=True, right=True)
         
 class Heatmap:
     """A square Hi-C panel. Default view is split: contact frequency below the
@@ -180,7 +180,9 @@ class Heatmap:
     def layout(self, rect: pygame.Rect, n: int):
         self.rect = pygame.Rect(rect)
         self.n = n
-        pad_l, pad_t = 26, 30
+        # pad_t gives 3 stacked rows above the grid: title, subtitle, bin
+        # ticks -- tall enough that none of them overlap each other.
+        pad_l, pad_t = 30, 46
         side = min(rect.w - pad_l - 6, rect.h - pad_t - 30)
         side = max(40, (side // n) * n if side // n > 0 else side)
         self.grid = pygame.Rect(rect.x + pad_l, rect.y + pad_t, side, side)
@@ -210,13 +212,13 @@ class Heatmap:
 
         eyebrow(surf, self.title, self.rect.x, self.rect.y + 2, accent)
         if subtitle:
-            label(surf, subtitle, self.rect.x + 1, self.rect.y + 15, size=10,
-                  col=theme.TEXT_FAINT)
+            label(surf, subtitle, self.rect.x + 1, self.rect.y + 16, size=11,
+                  col=theme.TEXT_DIM)
         if live:
-            r = pygame.Rect(self.rect.right - 44, self.rect.y + 1, 40, 13)
+            r = pygame.Rect(self.rect.right - 46, self.rect.y + 1, 42, 14)
             pygame.draw.rect(surf, theme.lerp_col(theme.AMBER, theme.INK, 0.7), r,
                              border_radius=3)
-            label(surf, "LIVE", r.centerx, r.y + 1, size=9, col=theme.AMBER,
+            label(surf, "LIVE", r.centerx, r.y + 1, size=10, col=theme.AMBER,
                   mono=True, bold=True, center=True)
 
         surf.blit(self._surf, self.grid)
@@ -236,13 +238,13 @@ class Heatmap:
 
         # bin numbers -- the whole point of a small polymer is that you can count
         step = 1 if cell >= 17 else (2 if cell >= 10 else (5 if cell >= 6 else 10))
-        f = theme.font(9, mono=True)
+        f = theme.font(10, mono=True, bold=True)
         for k in range(0, n, step):
             x = self.grid.x + (k + 0.5) * cell
-            img = f.render(str(k), True, theme.TEXT_FAINT)
-            surf.blit(img, (x - img.get_width() / 2, self.grid.y - 12))
+            img = f.render(str(k), True, theme.TEXT_DIM)
+            surf.blit(img, (x - img.get_width() / 2, self.grid.y - 15))
             y = self.grid.y + (k + 0.5) * cell
-            img = f.render(str(k), True, theme.TEXT_FAINT)
+            img = f.render(str(k), True, theme.TEXT_DIM)
             surf.blit(img, (self.grid.x - img.get_width() - 4, y - img.get_height() / 2))
 
         # diagonal
@@ -269,9 +271,9 @@ class Heatmap:
                              (self.grid.x + j * cell, self.grid.y + i * cell,
                               max(2, cell), max(2, cell)), 1)
             txt = f"[{i:>2},{j:>2}]  P={P[i, j]:.3f}  r={C[i, j]:+.2f}"
-            label(surf, txt, self.grid.x, y, size=10, col=theme.CYAN, mono=True)
+            label(surf, txt, self.grid.x, y, size=11, col=theme.CYAN, mono=True, bold=True)
         else:
-            label(surf, MODE_LABEL[mode], self.grid.x, y, size=10, col=theme.TEXT_FAINT)
+            label(surf, MODE_LABEL[mode], self.grid.x, y, size=11, col=theme.TEXT_DIM)
 
     def _dot(self, surf, i, j, col, filled=True):
         cell = self.grid.w / self.n
@@ -309,7 +311,7 @@ def eigen_track(surf, rect, e1, types=None, *, title="E1", show_axis=True):
         pygame.draw.rect(surf, col, r)
     if show_axis:
         pygame.draw.line(surf, theme.RULE, (rect.x, mid), (rect.right, mid), 1)
-    label(surf, title, rect.x + 3, rect.y - 12, size=9, col=theme.TEXT_FAINT,
+    label(surf, title, rect.x + 3, rect.y - 13, size=10, col=theme.TEXT_DIM,
           mono=True, bold=True)
 
 
@@ -327,24 +329,25 @@ def type_track(surf, rect, types, hover=None):
 
 
 # ------------------------------------------------------------ metric table
+# Note: APA used to be a row here -- dropped (see analysis.py) since the toy
+# physics rarely builds up real loop-corner enrichment, so it only ever read 0.
 ROWS = [
     ("scc", "SCC", "stratum-adjusted corr", 0.0, 1.0),
     ("pearson", "Pearson", "log contact, |i-j|>=2", 0.0, 1.0),
     ("spearman", "Spearman", "rank corr", 0.0, 1.0),
     ("eig_r", "E1 r", "compartment corr", -1.0, 1.0),
     ("checker", "Checker", "correlation-matrix corr", -1.0, 1.0),
-    ("apa", "APA", "loop corner enrichment", 0.0, 1.0),
     ("loop_f1", "Loop F1", "anchors within +/-1 bin", 0.0, 1.0),
 ]
 
 def metric_table(surf, rect, rep, *, live=False):
     eyebrow(surf, "simulated  vs  experimental", rect.x, rect.y)
     if live:
-        label(surf, "updating", rect.right, rect.y - 1, size=9, col=theme.AMBER,
-              mono=True, right=True)
+        label(surf, "updating", rect.right, rect.y - 1, size=10, col=theme.AMBER,
+              mono=True, bold=True, right=True)
 
     y     = rect.y + 18
-    row_h = 24                          # was 21 -- extra 3 px between rows
+    row_h = 26                          # was 21 -- extra px between rows
 
     # Column x-positions:  name | description | bar | value
     # Pushing the description further right and the bar+value further right
@@ -360,10 +363,10 @@ def metric_table(surf, rect, rep, *, live=False):
         col = theme.score_color(q)
 
         # Metric abbreviation (left column)
-        label(surf, name, x_name, y + 3, size=11, col=theme.TEXT, mono=True)
+        label(surf, name, x_name, y + 3, size=12, col=theme.TEXT, mono=True, bold=True)
 
         # Description (middle column)
-        label(surf, desc, x_desc, y + 4, size=10, col=theme.TEXT_FAINT)
+        label(surf, desc, x_desc, y + 4, size=11, col=theme.TEXT_DIM)
 
         # Progress bar (right-centre column)
         bar = pygame.Rect(x_bar, y + 6, 86, 7)
@@ -384,7 +387,7 @@ def metric_table(surf, rect, rep, *, live=False):
 
         # Numeric value (right column)
         label(surf, f"{v:+.3f}" if lo < 0 else f"{v:.3f}",
-              x_val, y + 3, size=11, col=col, mono=True, right=True)
+              x_val, y + 3, size=12, col=col, mono=True, bold=True, right=True)
 
         y += row_h
         # Row separator -- a little softer than the original

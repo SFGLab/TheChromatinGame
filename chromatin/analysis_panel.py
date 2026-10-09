@@ -97,17 +97,17 @@ class AnalysisPanel:
             (px + 20, py + 12))
         n_pts = len(self.times)
         elapsed = f"{self.times[-1]:.1f} s" if self.times else "0.0 s"
-        sc.blit(theme.font(10, mono=True).render(
+        sc.blit(theme.font(11, mono=True).render(
             f"samples: {n_pts} / {MAX_HISTORY}  ·  elapsed: {elapsed}"
             f"  ·  every {self.SAMPLE_EVERY_MS} ms  ·  ESC to close",
-            True, theme.TEXT_FAINT),
+            True, theme.TEXT_DIM),
             (px + 20, py + 32))
 
         # Clear button (top-right corner of the panel)
         self._clear_btn = pygame.Rect(px + pw - 82, py + 12, 68, 26)
         pygame.draw.rect(sc, theme.PANEL_HI, self._clear_btn, border_radius=5)
         pygame.draw.rect(sc, theme.RULE, self._clear_btn, 1, border_radius=5)
-        clbl = theme.font(11).render("Clear", True, theme.TEXT_DIM)
+        clbl = theme.font(12, bold=True).render("Clear", True, theme.TEXT_DIM)
         sc.blit(clbl, (self._clear_btn.x + (self._clear_btn.w - clbl.get_width()) // 2,
                        self._clear_btn.y + (self._clear_btn.h - clbl.get_height()) // 2))
 
@@ -137,18 +137,18 @@ class AnalysisPanel:
         sc.blit(bg, (gx, gy))
 
         # Metric name (top-left)
-        sc.blit(theme.font(10, bold=True).render(label, True, col), (gx + 8, gy + 6))
+        sc.blit(theme.font(11, bold=True).render(label, True, col), (gx + 8, gy + 6))
 
         # Waiting for data
         if len(hist) < 2:
-            sc.blit(theme.font(10, mono=True).render("collecting…", True, theme.TEXT_FAINT),
+            sc.blit(theme.font(11, mono=True).render("collecting…", True, theme.TEXT_DIM),
                     (gx + 8, gy + gh // 2 - 6))
             return
 
         vals   = np.array(hist, dtype=float)
         finite = vals[np.isfinite(vals)]
         if len(finite) == 0:
-            sc.blit(theme.font(10, mono=True).render("no data", True, theme.TEXT_FAINT),
+            sc.blit(theme.font(11, mono=True).render("no data", True, theme.TEXT_DIM),
                     (gx + 8, gy + gh // 2 - 6))
             return
 
@@ -172,23 +172,23 @@ class AnalysisPanel:
             return sx, sy
 
         # Y-axis grid lines and labels
-        gf = theme.font(9, mono=True)
+        gf = theme.font(10, mono=True)
         for frac in (0.0, 0.5, 1.0):
             v  = vmin + frac * span
             _, sy = to_screen(t0, v)
             pygame.draw.line(sc, theme.RULE_SOFT,
                              (gx + lpad, sy), (gx + lpad + plot_w, sy), 1)
-            lbl = gf.render(f"{v:.2f}", True, theme.TEXT_FAINT)
+            lbl = gf.render(f"{v:.2f}", True, theme.TEXT_DIM)
             sc.blit(lbl, (gx + lpad - lbl.get_width() - 4, sy - 5))
 
         # Current value (top-right of subplot)
         cur = vals[-1]
         cur_txt = f"{cur:.3f}" if np.isfinite(cur) else "—"
-        cur_lbl = theme.font(11, mono=True, bold=True).render(cur_txt, True, col)
+        cur_lbl = theme.font(12, mono=True, bold=True).render(cur_txt, True, col)
         sc.blit(cur_lbl, (gx + gw - rpad - cur_lbl.get_width() - 2, gy + 6))
 
         # Time axis label (bottom-right)
-        sc.blit(gf.render(f"{t1:.0f} s", True, theme.TEXT_FAINT),
+        sc.blit(gf.render(f"{t1:.0f} s", True, theme.TEXT_DIM),
                 (gx + lpad + plot_w - 20, gy + tpad + plot_h + 4))
 
         # Clip to the plot rectangle so lines don't bleed into neighbours
